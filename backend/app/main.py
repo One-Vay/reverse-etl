@@ -1,14 +1,15 @@
 """FastAPI application entry point."""
 
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.core.database import engine, Base
-from app.features.sources.router import router as sources_router
+from app.core.database import Base, engine
 from app.features.destinations.router import router as destinations_router
 from app.features.mappings.router import router as mappings_router
+from app.features.sources.router import router as sources_router
 from app.features.syncs.router import router as syncs_router
 
 

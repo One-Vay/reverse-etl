@@ -1,12 +1,12 @@
 # app/features/mappings/models.py
 """Mapping model that defines field transformations between source and destination."""
 
-from sqlalchemy import String, JSON, ForeignKey
-from typing import List
+from sqlalchemy import JSON, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from app.core.database import Base, TimestampMixin
-from app.features.syncs.models import Sync
 from app.features.sources.models import Source
+from app.features.syncs.models import Sync
 
 
 class Mapping(Base, TimestampMixin):
@@ -59,7 +59,7 @@ class Mapping(Base, TimestampMixin):
         back_populates="mappings",
         lazy="selectin",
     )
-    syncs: Mapped[List[Sync]] = relationship(
+    syncs: Mapped[list[Sync]] = relationship(
         back_populates="mapping",
         cascade="all, delete-orphan",
         lazy="selectin",

@@ -1,8 +1,10 @@
 """Repository for Destination entity."""
 
-from typing import Optional, Sequence
-from sqlalchemy import select, update, delete
+from collections.abc import Sequence
+
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.features.destinations.models import Destination
 from app.features.destinations.schemas import DestinationCreate, DestinationUpdate
 
@@ -13,12 +15,12 @@ class DestinationRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def get_by_id(self, id: int) -> Optional[Destination]:
+    async def get_by_id(self, id: int) -> Destination | None:
         stmt = select(Destination).where(Destination.id == id)
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def get_by_name(self, name: str) -> Optional[Destination]:
+    async def get_by_name(self, name: str) -> Destination | None:
         stmt = select(Destination).where(Destination.name == name)
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
@@ -27,8 +29,8 @@ class DestinationRepository:
         self,
         skip: int = 0,
         limit: int = 100,
-        name: Optional[str] = None,
-        type: Optional[str] = None,
+        name: str | None = None,
+        type: str | None = None,
     ) -> Sequence[Destination]:
         stmt = select(Destination)
         if name:
@@ -39,7 +41,7 @@ class DestinationRepository:
         result = await self.session.execute(stmt)
         return result.scalars().all()
 
-    async def get_count(self, name: Optional[str] = None, type: Optional[str] = None) -> int:
+    async def get_count(self, name: str | None = None, type: str | None = None) -> int:
         stmt = select(Destination)
         if name:
             stmt = stmt.where(Destination.name.ilike(f"%{name}%"))
@@ -59,7 +61,7 @@ class DestinationRepository:
         await self.session.flush()
         return dest
 
-    async def update(self, id: int, data: DestinationUpdate) -> Optional[Destination]:
+    async def update(self, id: int, data: DestinationUpdate) -> Destination | None:
         update_dict = data.model_dump(exclude_unset=True)
         if not update_dict:
             return await self.get_by_id(id)

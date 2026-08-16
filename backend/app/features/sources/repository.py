@@ -1,8 +1,10 @@
 """Repository for Source entity."""
 
-from typing import Optional, Sequence
-from sqlalchemy import select, update, delete
+from collections.abc import Sequence
+
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.features.sources.models import Source
 from app.features.sources.schemas import SourceCreate, SourceUpdate
 
@@ -13,12 +15,12 @@ class SourceRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def get_by_id(self, id: int) -> Optional[Source]:
+    async def get_by_id(self, id: int) -> Source | None:
         stmt = select(Source).where(Source.id == id)
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def get_by_name(self, name: str) -> Optional[Source]:
+    async def get_by_name(self, name: str) -> Source | None:
         stmt = select(Source).where(Source.name == name)
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
@@ -27,8 +29,8 @@ class SourceRepository:
         self,
         skip: int = 0,
         limit: int = 100,
-        name: Optional[str] = None,
-        type: Optional[str] = None,
+        name: str | None = None,
+        type: str | None = None,
     ) -> Sequence[Source]:
         stmt = select(Source)
         if name:
@@ -39,7 +41,7 @@ class SourceRepository:
         result = await self.session.execute(stmt)
         return result.scalars().all()
 
-    async def get_count(self, name: Optional[str] = None, type: Optional[str] = None) -> int:
+    async def get_count(self, name: str | None = None, type: str | None = None) -> int:
         stmt = select(Source)
         if name:
             stmt = stmt.where(Source.name.ilike(f"%{name}%"))
@@ -62,7 +64,7 @@ class SourceRepository:
         await self.session.flush()
         return source
 
-    async def update(self, id: int, data: SourceUpdate) -> Optional[Source]:
+    async def update(self, id: int, data: SourceUpdate) -> Source | None:
         update_dict = data.model_dump(exclude_unset=True)
         if not update_dict:
             return await self.get_by_id(id)

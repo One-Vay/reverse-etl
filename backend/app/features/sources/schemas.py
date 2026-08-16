@@ -1,7 +1,7 @@
 """Pydantic schemas for Source entity."""
 
 from datetime import datetime
-from typing import Optional
+
 from pydantic import BaseModel, Field, SecretStr, field_validator
 
 from app.features.sources.models import SourceType
@@ -31,19 +31,18 @@ class SourceBase(BaseModel):
 
 class SourceCreate(SourceBase):
     """Schema for creating a new source."""
-    pass
 
 
 class SourceUpdate(BaseModel):
     """Schema for updating an existing source (all fields optional)."""
 
-    name: Optional[str] = Field(None, min_length=1, max_length=255)
-    type: Optional[SourceType] = None
-    host: Optional[str] = Field(None, min_length=1)
-    port: Optional[int] = Field(None, ge=1, le=65535)
-    database: Optional[str] = Field(None, min_length=1)
-    username: Optional[str] = Field(None, min_length=1)
-    password: Optional[SecretStr] = None
+    name: str | None = Field(None, min_length=1, max_length=255)
+    type: SourceType | None = None
+    host: str | None = Field(None, min_length=1)
+    port: int | None = Field(None, ge=1, le=65535)
+    database: str | None = Field(None, min_length=1)
+    username: str | None = Field(None, min_length=1)
+    password: SecretStr | None = None
 
 
 class SourceRead(BaseModel):

@@ -1,19 +1,17 @@
-import asyncio
-from logging.config import fileConfig
-from sqlalchemy import pool, create_engine, text, engine_from_config
-from sqlalchemy.engine import Connection
-from sqlalchemy.ext.asyncio import async_engine_from_config
-from sqlalchemy.exc import OperationalError
-from alembic import context
-from urllib.parse import urlparse
 import sys
+from logging.config import fileConfig
 from pathlib import Path
+from urllib.parse import urlparse
+
+from alembic import context
+from sqlalchemy import create_engine, engine_from_config, pool, text
+from sqlalchemy.engine import Connection
+from sqlalchemy.exc import OperationalError
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from app.core.database import Base
 from app.core.config import settings
-from app.features.sources.models import Source
+from app.core.database import Base
 
 config = context.config
 # Заменяем asyncpg на psycopg2 для Alembic (синхронно)
@@ -25,15 +23,16 @@ fileConfig(config.config_file_name)
 
 target_metadata = Base.metadata
 
+
 def ensure_database_exists():
     """Создаёт базу данных, если она не существует."""
     target_url = settings.DATABASE_URL
     parsed = urlparse(target_url)
-    db_name = parsed.path.lstrip('/')
-    if parsed.scheme.startswith('postgresql'):
+    db_name = parsed.path.lstrip("/")
+    if parsed.scheme.startswith("postgresql"):
         # Используем синхронный драйвер для проверки/создания БД
         sync_url = target_url.replace("postgresql+asyncpg://", "postgresql://")
-        base_url = sync_url.replace(f'/{db_name}', '/postgres')
+        base_url = sync_url.replace(f"/{db_name}", "/postgres")
         try:
             engine = create_engine(sync_url, isolation_level="AUTOCOMMIT")
             with engine.connect() as conn:
@@ -44,10 +43,12 @@ def ensure_database_exists():
             with engine_default.connect() as conn:
                 conn.execute(text(f"CREATE DATABASE {db_name}"))
             print(f"✅ База данных '{db_name}' создана.")
-    elif 'sqlite' in parsed.scheme:
+    elif "sqlite" in parsed.scheme:
         pass  # SQLite создаёт файл автоматически
 
+
 ensure_database_exists()
+
 
 def run_migrations_offline():
     context.configure(
@@ -59,10 +60,12 @@ def run_migrations_offline():
     with context.begin_transaction():
         context.run_migrations()
 
+
 def do_run_migrations(connection: Connection):
     context.configure(connection=connection, target_metadata=target_metadata)
     with context.begin_transaction():
         context.run_migrations()
+
 
 def run_migrations_online():
     # Используем синхронный движок (psycopg2)
@@ -72,12 +75,10 @@ def run_migrations_online():
         poolclass=pool.NullPool,
     )
     with connectable.connect() as connection:
-        context.configure(
-            connection=connection,
-            target_metadata=target_metadata
-        )
+        context.configure(connection=connection, target_metadata=target_metadata)
         with context.begin_transaction():
             context.run_migrations()
+
 
 if context.is_offline_mode():
     run_migrations_offline()

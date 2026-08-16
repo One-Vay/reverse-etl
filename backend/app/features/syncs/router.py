@@ -1,16 +1,21 @@
 """API endpoints for Sync management."""
 
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.database import get_db
-from app.core.exceptions import NotFoundError, ConflictError, ValidationError
-from app.features.syncs.repository import SyncRepository
-from app.features.sources.repository import SourceRepository
+from app.core.exceptions import NotFoundError, ValidationError
 from app.features.destinations.repository import DestinationRepository
 from app.features.mappings.repository import MappingRepository
+from app.features.sources.repository import SourceRepository
+from app.features.syncs.repository import SyncRepository
+from app.features.syncs.schemas import (
+    SyncCreate,
+    SyncListResponse,
+    SyncRead,
+    SyncUpdate,
+)
 from app.features.syncs.service import SyncService
-from app.features.syncs.schemas import SyncCreate, SyncUpdate, SyncRead, SyncListResponse
 
 router = APIRouter(prefix="/syncs", tags=["syncs"])
 
@@ -27,11 +32,11 @@ async def get_sync_service(session: AsyncSession = Depends(get_db)) -> SyncServi
 async def list_syncs(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
-    source_id: Optional[int] = None,
-    destination_id: Optional[int] = None,
-    mapping_id: Optional[int] = None,
-    status: Optional[str] = None,
-    search: Optional[str] = None,
+    source_id: int | None = None,
+    destination_id: int | None = None,
+    mapping_id: int | None = None,
+    status: str | None = None,
+    search: str | None = None,
     service: SyncService = Depends(get_sync_service),
 ):
     return await service.get_list(
@@ -63,7 +68,9 @@ async def create_sync(
     except NotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except ValidationError as e:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
+        )
 
 
 @router.put("/{id}", response_model=SyncRead)
@@ -77,7 +84,9 @@ async def update_sync(
     except NotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except ValidationError as e:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
+        )
 
 
 @router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)

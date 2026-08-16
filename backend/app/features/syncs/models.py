@@ -1,14 +1,15 @@
 """Sync model representing a scheduled data transfer job."""
 
 import enum
-from typing import List
 from datetime import datetime
-from sqlalchemy import String, DateTime, ForeignKey
+
+from sqlalchemy import DateTime, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from app.core.database import Base, TimestampMixin
+from app.features.destinations.models import Destination
 from app.features.mappings.models import Mapping
 from app.features.sources.models import Source
-from app.features.destinations.models import Destination
 
 
 class SyncStatus(str, enum.Enum):

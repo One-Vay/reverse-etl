@@ -1,16 +1,22 @@
 """Service layer for Mapping entity."""
 
-from typing import Optional
+from app.core.exceptions import NotFoundError, ValidationError
 from app.features.mappings.repository import MappingRepository
+from app.features.mappings.schemas import (
+    MappingCreate,
+    MappingListResponse,
+    MappingRead,
+    MappingUpdate,
+)
 from app.features.sources.repository import SourceRepository
-from app.features.mappings.schemas import MappingCreate, MappingUpdate, MappingRead, MappingListResponse
-from app.core.exceptions import NotFoundError, ConflictError, ValidationError
 
 
 class MappingService:
     """Business logic for mappings."""
 
-    def __init__(self, repository: MappingRepository, source_repository: SourceRepository):
+    def __init__(
+        self, repository: MappingRepository, source_repository: SourceRepository
+    ):
         self.repository = repository
         self.source_repository = source_repository
 
@@ -24,9 +30,9 @@ class MappingService:
         self,
         skip: int = 0,
         limit: int = 100,
-        source_id: Optional[int] = None,
-        source_table: Optional[str] = None,
-        destination_entity: Optional[str] = None,
+        source_id: int | None = None,
+        source_table: str | None = None,
+        destination_entity: str | None = None,
     ) -> MappingListResponse:
         total = await self.repository.get_count(
             source_id=source_id,

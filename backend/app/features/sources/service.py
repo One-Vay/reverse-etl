@@ -1,10 +1,14 @@
 """Service layer for Source entity."""
 
-from typing import Optional, Sequence
+from app.core.exceptions import ConflictError, NotFoundError
+from app.core.security import decrypt_password, encrypt_password
 from app.features.sources.repository import SourceRepository
-from app.features.sources.schemas import SourceCreate, SourceUpdate, SourceRead, SourceListResponse
-from app.core.exceptions import NotFoundError, ConflictError
-from app.core.security import encrypt_password, decrypt_password
+from app.features.sources.schemas import (
+    SourceCreate,
+    SourceListResponse,
+    SourceRead,
+    SourceUpdate,
+)
 
 
 class SourceService:
@@ -24,12 +28,14 @@ class SourceService:
         self,
         skip: int = 0,
         limit: int = 100,
-        name: Optional[str] = None,
-        type: Optional[str] = None,
+        name: str | None = None,
+        type: str | None = None,
     ) -> SourceListResponse:
         """Get a paginated list of sources with optional filters."""
         total = await self.repository.get_count(name=name, type=type)
-        items = await self.repository.get_all(skip=skip, limit=limit, name=name, type=type)
+        items = await self.repository.get_all(
+            skip=skip, limit=limit, name=name, type=type
+        )
         return SourceListResponse(
             items=[SourceRead.model_validate(item) for item in items],
             total=total,
@@ -66,7 +72,9 @@ class SourceService:
         # Encrypt password if provided
         update_dict = data.model_dump(exclude_unset=True)
         if "password" in update_dict and update_dict["password"] is not None:
-            update_dict["password"] = encrypt_password(update_dict["password"].get_secret_value())
+            update_dict["password"] = encrypt_password(
+                update_dict["password"].get_secret_value()
+            )
 
         source = await self.repository.update(id, SourceUpdate(**update_dict))
         if not source:

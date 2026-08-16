@@ -1,7 +1,7 @@
 """Pydantic schemas for Destination entity."""
 
 from datetime import datetime
-from typing import Optional
+
 from pydantic import BaseModel, Field, SecretStr, field_validator
 
 from app.features.destinations.models import DestinationType
@@ -28,16 +28,15 @@ class DestinationBase(BaseModel):
 
 class DestinationCreate(DestinationBase):
     """Schema for creating a new destination."""
-    pass
 
 
 class DestinationUpdate(BaseModel):
     """Schema for updating an existing destination (all fields optional)."""
 
-    name: Optional[str] = Field(None, min_length=1, max_length=255)
-    type: Optional[DestinationType] = None
-    api_url: Optional[str] = Field(None, min_length=1)
-    auth_token: Optional[SecretStr] = None
+    name: str | None = Field(None, min_length=1, max_length=255)
+    type: DestinationType | None = None
+    api_url: str | None = Field(None, min_length=1)
+    auth_token: SecretStr | None = None
 
 
 class DestinationRead(BaseModel):

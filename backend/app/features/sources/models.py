@@ -1,9 +1,10 @@
 """Source model representing a data source (PostgreSQL, ClickHouse, etc.)."""
 
 import enum
-from typing import List
-from sqlalchemy import String, Integer
+
+from sqlalchemy import Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from app.core.database import Base, TimestampMixin
 from app.features.mappings.models import Mapping
 
@@ -48,7 +49,7 @@ class Source(Base, TimestampMixin):
     )
 
     # One‑to‑many relationship with Mapping
-    mappings: Mapped[List[Mapping]] = relationship(
+    mappings: Mapped[list[Mapping]] = relationship(
         back_populates="source",
         cascade="all, delete-orphan",
         lazy="selectin",
