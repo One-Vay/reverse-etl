@@ -1,7 +1,8 @@
 """Pydantic schemas for Mapping entity."""
 
 from datetime import datetime
-from typing import Optional, Any
+from typing import Any
+
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -21,7 +22,7 @@ class MappingBase(BaseModel):
             return v
         for item in v:
             if not isinstance(item, dict):
-                raise ValueError("Each field mapping must be a dictionary")
+                raise TypeError("Each field mapping must be a dictionary")
             if "source_field" not in item or "destination_field" not in item:
                 raise ValueError(
                     "Each field mapping must contain 'source_field' and 'destination_field'"
@@ -31,17 +32,16 @@ class MappingBase(BaseModel):
 
 class MappingCreate(MappingBase):
     """Schema for creating a new mapping."""
-    pass
 
 
 class MappingUpdate(BaseModel):
     """Schema for updating an existing mapping (all fields optional)."""
 
-    name: Optional[str] = Field(None, min_length=1, max_length=255)
-    source_id: Optional[int] = None
-    source_table: Optional[str] = Field(None, min_length=1)
-    destination_entity: Optional[str] = Field(None, min_length=1)
-    field_mappings: Optional[list[dict[str, Any]]] = None
+    name: str | None = Field(None, min_length=1, max_length=255)
+    source_id: int | None = None
+    source_table: str | None = Field(None, min_length=1)
+    destination_entity: str | None = Field(None, min_length=1)
+    field_mappings: list[dict[str, Any]] | None = None
 
 
 class MappingRead(BaseModel):

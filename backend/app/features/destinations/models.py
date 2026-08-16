@@ -1,9 +1,10 @@
 """Destination model representing a target CRM (Bitrix24, AmoCRM, etc.)."""
 
 import enum
-from typing import List
+
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from app.core.database import Base, TimestampMixin
 from app.features.syncs.models import Sync
 
@@ -48,7 +49,7 @@ class Destination(Base, TimestampMixin):
         doc="Authentication token (webhook key or OAuth token)",
     )
 
-    syncs: Mapped[List[Sync]] = relationship(
+    syncs: Mapped[list[Sync]] = relationship(
         back_populates="destination",
         cascade="all, delete-orphan",
         lazy="selectin",

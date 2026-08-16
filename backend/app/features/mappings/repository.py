@@ -1,8 +1,10 @@
 """Repository for Mapping entity."""
 
-from typing import Optional, Sequence
-from sqlalchemy import select, update, delete
+from collections.abc import Sequence
+
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.features.mappings.models import Mapping
 from app.features.mappings.schemas import MappingCreate, MappingUpdate
 
@@ -13,12 +15,12 @@ class MappingRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def get_by_id(self, id: int) -> Optional[Mapping]:
+    async def get_by_id(self, id: int) -> Mapping | None:
         stmt = select(Mapping).where(Mapping.id == id)
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def get_by_name(self, name: str) -> Optional[Mapping]:
+    async def get_by_name(self, name: str) -> Mapping | None:
         stmt = select(Mapping).where(Mapping.name == name)
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
@@ -27,9 +29,9 @@ class MappingRepository:
         self,
         skip: int = 0,
         limit: int = 100,
-        source_id: Optional[int] = None,
-        source_table: Optional[str] = None,
-        destination_entity: Optional[str] = None,
+        source_id: int | None = None,
+        source_table: str | None = None,
+        destination_entity: str | None = None,
     ) -> Sequence[Mapping]:
         stmt = select(Mapping)
         if source_id is not None:
@@ -44,9 +46,9 @@ class MappingRepository:
 
     async def get_count(
         self,
-        source_id: Optional[int] = None,
-        source_table: Optional[str] = None,
-        destination_entity: Optional[str] = None,
+        source_id: int | None = None,
+        source_table: str | None = None,
+        destination_entity: str | None = None,
     ) -> int:
         stmt = select(Mapping)
         if source_id is not None:
@@ -75,7 +77,7 @@ class MappingRepository:
         await self.session.flush()
         return mapping
 
-    async def update(self, id: int, data: MappingUpdate) -> Optional[Mapping]:
+    async def update(self, id: int, data: MappingUpdate) -> Mapping | None:
         update_dict = data.model_dump(exclude_unset=True)
         if not update_dict:
             return await self.get_by_id(id)

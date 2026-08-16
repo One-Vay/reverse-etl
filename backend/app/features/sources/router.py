@@ -1,13 +1,18 @@
 """API endpoints for Source management."""
 
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.database import get_db
-from app.core.exceptions import NotFoundError, ConflictError
+from app.core.exceptions import ConflictError, NotFoundError
 from app.features.sources.repository import SourceRepository
+from app.features.sources.schemas import (
+    SourceCreate,
+    SourceListResponse,
+    SourceRead,
+    SourceUpdate,
+)
 from app.features.sources.service import SourceService
-from app.features.sources.schemas import SourceCreate, SourceUpdate, SourceRead, SourceListResponse
 
 router = APIRouter(prefix="/sources", tags=["sources"])
 
@@ -21,8 +26,8 @@ async def get_source_service(session: AsyncSession = Depends(get_db)) -> SourceS
 async def list_sources(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
-    name: Optional[str] = None,
-    type: Optional[str] = None,
+    name: str | None = None,
+    type: str | None = None,
     service: SourceService = Depends(get_source_service),
 ):
     """List all sources with pagination and filters."""

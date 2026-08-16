@@ -1,14 +1,20 @@
 """Service layer for Sync entity."""
 
-from typing import Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
+
 import croniter
-from app.features.syncs.repository import SyncRepository
-from app.features.sources.repository import SourceRepository
+
+from app.core.exceptions import NotFoundError, ValidationError
 from app.features.destinations.repository import DestinationRepository
 from app.features.mappings.repository import MappingRepository
-from app.features.syncs.schemas import SyncCreate, SyncUpdate, SyncRead, SyncListResponse
-from app.core.exceptions import NotFoundError, ConflictError, ValidationError
+from app.features.sources.repository import SourceRepository
+from app.features.syncs.repository import SyncRepository
+from app.features.syncs.schemas import (
+    SyncCreate,
+    SyncListResponse,
+    SyncRead,
+    SyncUpdate,
+)
 
 
 class SyncService:
@@ -36,11 +42,11 @@ class SyncService:
         self,
         skip: int = 0,
         limit: int = 100,
-        source_id: Optional[int] = None,
-        destination_id: Optional[int] = None,
-        mapping_id: Optional[int] = None,
-        status: Optional[str] = None,
-        search: Optional[str] = None,
+        source_id: int | None = None,
+        destination_id: int | None = None,
+        mapping_id: int | None = None,
+        status: str | None = None,
+        search: str | None = None,
     ) -> SyncListResponse:
         total = await self.repository.get_count(
             source_id=source_id,
@@ -110,9 +116,13 @@ class SyncService:
                 raise NotFoundError(f"Source with id {data.source_id} not found")
 
         if data.destination_id is not None:
-            destination = await self.destination_repository.get_by_id(data.destination_id)
+            destination = await self.destination_repository.get_by_id(
+                data.destination_id
+            )
             if not destination:
-                raise NotFoundError(f"Destination with id {data.destination_id} not found")
+                raise NotFoundError(
+                    f"Destination with id {data.destination_id} not found"
+                )
 
         if data.mapping_id is not None:
             mapping = await self.mapping_repository.get_by_id(data.mapping_id)
@@ -154,7 +164,7 @@ class SyncService:
             raise NotFoundError(f"Sync with id {id} not found")
 
         # Update last_run to now
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         await self.repository.update_last_run(id, now)
 
         # Calculate next_run based on schedule
@@ -166,13 +176,13 @@ class SyncService:
     def _is_valid_cron(schedule: str) -> bool:
         """Check if schedule is a valid cron expression."""
         try:
-            croniter.croniter(schedule, datetime.utcnow())
+            croniter.croniter(schedule, datetime.now(timezone.utc))
             return True
         except (ValueError, croniter.CroniterBadCronError):
             return False
 
     @staticmethod
-    def _calculate_next_run(schedule: str) -> Optional[datetime]:
+    def _calculate_next_run(schedule: str) -> datetime | None:
         """Calculate the next run time based on cron schedule."""
         try:
             cron = croniter.croniter(schedule, datetime.utcnow())

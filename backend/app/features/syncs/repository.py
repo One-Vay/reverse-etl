@@ -1,9 +1,11 @@
 """Repository for Sync entity."""
 
-from typing import Optional, Sequence
+from collections.abc import Sequence
 from datetime import datetime
-from sqlalchemy import select, update, delete, and_, or_
+
+from sqlalchemy import and_, delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.features.syncs.models import Sync, SyncStatus
 from app.features.syncs.schemas import SyncCreate, SyncUpdate
 
@@ -14,12 +16,12 @@ class SyncRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def get_by_id(self, id: int) -> Optional[Sync]:
+    async def get_by_id(self, id: int) -> Sync | None:
         stmt = select(Sync).where(Sync.id == id)
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def get_by_name(self, name: str) -> Optional[Sync]:
+    async def get_by_name(self, name: str) -> Sync | None:
         stmt = select(Sync).where(Sync.name == name)
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
@@ -28,11 +30,11 @@ class SyncRepository:
         self,
         skip: int = 0,
         limit: int = 100,
-        source_id: Optional[int] = None,
-        destination_id: Optional[int] = None,
-        mapping_id: Optional[int] = None,
-        status: Optional[SyncStatus] = None,
-        search: Optional[str] = None,
+        source_id: int | None = None,
+        destination_id: int | None = None,
+        mapping_id: int | None = None,
+        status: SyncStatus | None = None,
+        search: str | None = None,
     ) -> Sequence[Sync]:
         stmt = select(Sync)
         filters = []
@@ -59,11 +61,11 @@ class SyncRepository:
 
     async def get_count(
         self,
-        source_id: Optional[int] = None,
-        destination_id: Optional[int] = None,
-        mapping_id: Optional[int] = None,
-        status: Optional[SyncStatus] = None,
-        search: Optional[str] = None,
+        source_id: int | None = None,
+        destination_id: int | None = None,
+        mapping_id: int | None = None,
+        status: SyncStatus | None = None,
+        search: str | None = None,
     ) -> int:
         stmt = select(Sync)
         filters = []
@@ -121,16 +123,11 @@ class SyncRepository:
         await self.session.flush()
         return sync
 
-    async def update(self, id: int, data: SyncUpdate) -> Optional[Sync]:
+    async def update(self, id: int, data: SyncUpdate) -> Sync | None:
         update_dict = data.model_dump(exclude_unset=True)
         if not update_dict:
             return await self.get_by_id(id)
-        stmt = (
-            update(Sync)
-            .where(Sync.id == id)
-            .values(**update_dict)
-            .returning(Sync)
-        )
+        stmt = update(Sync).where(Sync.id == id).values(**update_dict).returning(Sync)
         result = await self.session.execute(stmt)
         await self.session.flush()
         return result.scalar_one_or_none()
@@ -140,12 +137,9 @@ class SyncRepository:
         result = await self.session.execute(stmt)
         return result.rowcount > 0
 
-    async def update_last_run(self, id: int, last_run: datetime) -> Optional[Sync]:
+    async def update_last_run(self, id: int, last_run: datetime) -> Sync | None:
         stmt = (
-            update(Sync)
-            .where(Sync.id == id)
-            .values(last_run=last_run)
-            .returning(Sync)
+            update(Sync).where(Sync.id == id).values(last_run=last_run).returning(Sync)
         )
         result = await self.session.execute(stmt)
         await self.session.flush()

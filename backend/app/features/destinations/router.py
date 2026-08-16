@@ -1,18 +1,25 @@
 """API endpoints for Destination management."""
 
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.database import get_db
-from app.core.exceptions import NotFoundError, ConflictError
+from app.core.exceptions import ConflictError, NotFoundError
 from app.features.destinations.repository import DestinationRepository
+from app.features.destinations.schemas import (
+    DestinationCreate,
+    DestinationListResponse,
+    DestinationRead,
+    DestinationUpdate,
+)
 from app.features.destinations.service import DestinationService
-from app.features.destinations.schemas import DestinationCreate, DestinationUpdate, DestinationRead, DestinationListResponse
 
 router = APIRouter(prefix="/destinations", tags=["destinations"])
 
 
-async def get_destination_service(session: AsyncSession = Depends(get_db)) -> DestinationService:
+async def get_destination_service(
+    session: AsyncSession = Depends(get_db),
+) -> DestinationService:
     repository = DestinationRepository(session)
     return DestinationService(repository)
 
@@ -21,15 +28,17 @@ async def get_destination_service(session: AsyncSession = Depends(get_db)) -> De
 async def list_destinations(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
-    name: Optional[str] = None,
-    type: Optional[str] = None,
+    name: str | None = None,
+    type: str | None = None,
     service: DestinationService = Depends(get_destination_service),
 ):
     return await service.get_list(skip=skip, limit=limit, name=name, type=type)
 
 
 @router.get("/{id}", response_model=DestinationRead)
-async def get_destination(id: int, service: DestinationService = Depends(get_destination_service)):
+async def get_destination(
+    id: int, service: DestinationService = Depends(get_destination_service)
+):
     try:
         return await service.get(id)
     except NotFoundError as e:
@@ -62,7 +71,9 @@ async def update_destination(
 
 
 @router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_destination(id: int, service: DestinationService = Depends(get_destination_service)):
+async def delete_destination(
+    id: int, service: DestinationService = Depends(get_destination_service)
+):
     try:
         await service.delete(id)
     except NotFoundError as e:
