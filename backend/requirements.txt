@@ -1,0 +1,10 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.0
+sqlalchemy[async]==2.0.35
+asyncpg==0.30.0
+aiosqlite==0.19.0
+greenlet==3.0.3
+pydantic-settings==2.4.0
+python-dotenv==1.0.1
+alembic==1.13.0
+cryptography==42.0.0

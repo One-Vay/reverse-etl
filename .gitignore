@@ -45,3 +45,6 @@ Thumbs.db
 
 # Users
 scripts.txt
+
+# Local fast test files
+t.py
