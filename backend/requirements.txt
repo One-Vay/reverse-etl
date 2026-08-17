@@ -1,10 +1,33 @@
+# Core
 fastapi==0.115.0
 uvicorn[standard]==0.30.0
+python-dotenv==1.0.1
+
+# Database
 sqlalchemy[async]==2.0.35
 asyncpg==0.30.0
-aiosqlite==0.19.0
-greenlet==3.0.3
-pydantic-settings==2.4.0
-python-dotenv==1.0.1
+aiosqlite==0.19.0  # for tests
 alembic==1.13.0
+psycopg2-binary==2.9.9  # for Alembic sync mode
+
+# Configuration & Validation
+pydantic==2.9.0
+pydantic-settings==2.4.0
+
+# Security
 cryptography==42.0.0
+python-jose[cryptography]==3.3.0  # optional, for JWT
+passlib[bcrypt]==1.7.4  # optional, for password hashing
+
+# Scheduling
+croniter==2.0.0  # for cron validation and next_run calculation
+
+# Testing (development only)
+pytest==8.3.2
+pytest-asyncio==0.24.0
+pytest-cov==5.0.0
+httpx==0.28.1
+
+# Other
+python-multipart==0.0.20  # for form data
+greenlet==3.0.3  # required for async SQLAlchemy

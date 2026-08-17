@@ -1,15 +1,20 @@
 """Sync model representing a scheduled data transfer job."""
 
+from __future__ import annotations
+
 import enum
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base, TimestampMixin
-from app.features.destinations.models import Destination
-from app.features.mappings.models import Mapping
-from app.features.sources.models import Source
+
+if TYPE_CHECKING:
+    from app.features.destinations.models import Destination
+    from app.features.mappings.models import Mapping
+    from app.features.sources.models import Source
 
 
 class SyncStatus(str, enum.Enum):
@@ -21,8 +26,7 @@ class SyncStatus(str, enum.Enum):
 
 
 class Sync(Base, TimestampMixin):
-    """
-    Synchronization job that links a source, a destination, and a mapping.
+    """Synchronization job that links a source, a destination, and a mapping.
 
     Each sync runs on a schedule and transfers data from the source table
     (via the mapping) to the destination CRM entity.
@@ -31,13 +35,8 @@ class Sync(Base, TimestampMixin):
     __tablename__ = "syncs"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
-    name: Mapped[str] = mapped_column(
-        String(255),
-        nullable=False,
-        doc="User‑friendly sync name",
-    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
 
-    # Foreign keys with cascade delete
     source_id: Mapped[int] = mapped_column(
         ForeignKey("sources.id", ondelete="CASCADE"),
         nullable=False,
@@ -54,45 +53,25 @@ class Sync(Base, TimestampMixin):
         index=True,
     )
 
-    schedule: Mapped[str] = mapped_column(
-        String(100),
-        nullable=False,
-        doc="Cron expression ('*/30 * * * *') or interval text ('30 minutes')",
-    )
-    incremental_field: Mapped[str | None] = mapped_column(
-        String(255),
-        nullable=True,
-        doc="Column name used for incremental loading (e.g., 'updated_at')",
-    )
+    schedule: Mapped[str] = mapped_column(String(100), nullable=False)
+    incremental_field: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     last_run: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True),
-        nullable=True,
-        doc="Timestamp of the last successful run",
+        DateTime(timezone=True), nullable=True
     )
     next_run: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True),
-        nullable=True,
-        doc="Estimated next run time",
+        DateTime(timezone=True), nullable=True
     )
 
     status: Mapped[SyncStatus] = mapped_column(
-        String(20),
-        nullable=False,
-        default=SyncStatus.ACTIVE,
-        doc="Current sync status",
+        String(20), nullable=False, default=SyncStatus.ACTIVE
     )
 
-    # Relationships
-    source: Mapped[Source] = relationship(lazy="selectin")
-    destination: Mapped[Destination] = relationship(
-        back_populates="syncs",
-        lazy="selectin",
+    source: Mapped["Source"] = relationship(lazy="selectin")
+    destination: Mapped["Destination"] = relationship(
+        back_populates="syncs", lazy="selectin"
     )
-    mapping: Mapped[Mapping] = relationship(
-        back_populates="syncs",
-        lazy="selectin",
-    )
+    mapping: Mapped["Mapping"] = relationship(back_populates="syncs", lazy="selectin")
 
     def __repr__(self) -> str:
         return f"<Sync(id={self.id}, name='{self.name}', status='{self.status}')>"
