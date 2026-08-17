@@ -13,11 +13,23 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from app.core.config import settings
 from app.core.database import Base
 
+# Import every model module so their tables register on Base.metadata before
+# autogenerate compares it against the database. Without these imports,
+# Base.metadata is empty and autogenerate thinks all existing tables should
+# be dropped.
+from app.features.destinations import models as destinations_models  # noqa: F401
+from app.features.mappings import models as mappings_models  # noqa: F401
+from app.features.sources import models as sources_models  # noqa: F401
+from app.features.syncs import models as syncs_models  # noqa: F401
+
 config = context.config
-# Заменяем asyncpg на psycopg2 для Alembic (синхронно)
+# Alembic runs migrations synchronously, so swap the async drivers used by the
+# application (asyncpg / aiosqlite) for their sync counterparts.
 database_url = settings.DATABASE_URL
 if "postgresql+asyncpg://" in database_url:
     database_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
+elif "sqlite+aiosqlite://" in database_url:
+    database_url = database_url.replace("sqlite+aiosqlite://", "sqlite://")
 config.set_main_option("sqlalchemy.url", database_url)
 fileConfig(config.config_file_name)
 
