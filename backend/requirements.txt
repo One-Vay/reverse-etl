@@ -26,3 +26,4 @@ croniter==2.0.0  # for cron validation and next_run calculation
 # Other
 python-multipart==0.0.20  # for form data
 greenlet==3.0.3  # required for async SQLAlchemy
+httpx==0.28.1  # REST client for Bitrix24/AmoCRM destination connectors

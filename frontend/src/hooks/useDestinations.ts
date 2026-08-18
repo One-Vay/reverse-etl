@@ -82,3 +82,48 @@ export function useDeleteDestination() {
     },
   });
 }
+
+/** Entity types a destination can receive records as, for the mapping
+ * form's entity picker. Disabled until `destinationId` is set. */
+export function useDestinationEntities(destinationId: number | undefined) {
+  return useQuery({
+    queryKey: queryKeys.destinationEntities(destinationId ?? 0),
+    queryFn: () => destinationsApi.listEntities(destinationId as number),
+    enabled: destinationId != null && destinationId > 0,
+    staleTime: 60_000,
+  });
+}
+
+/** Fields of one destination entity, for the mapping form's field picker.
+ * Disabled until both `destinationId` and `entity` are set. */
+export function useDestinationEntityFields(
+  destinationId: number | undefined,
+  entity: string | undefined,
+) {
+  return useQuery({
+    queryKey: queryKeys.destinationEntityFields(destinationId ?? 0, entity ?? ""),
+    queryFn: () =>
+      destinationsApi.getEntityFields(destinationId as number, entity as string),
+    enabled: destinationId != null && destinationId > 0 && !!entity,
+    staleTime: 60_000,
+  });
+}
+
+/** Tests a destination's stored credentials. Resolves with `{success,
+ * message}` even on failed connections — only rejects for app-level errors
+ * (destination not found, connector not implemented, network failure),
+ * which is when the error toast fires. */
+export function useTestDestinationConnection() {
+  const { showToast } = useToast();
+
+  return useMutation({
+    mutationFn: (id: number) => destinationsApi.testConnection(id),
+    onError: (error) => {
+      showToast({
+        variant: "error",
+        title: "Couldn't test connection",
+        description: getErrorMessage(error),
+      });
+    },
+  });
+}

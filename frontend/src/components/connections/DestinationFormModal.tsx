@@ -24,6 +24,25 @@ const DEFAULT_VALUES: DestinationFormValues = {
   auth_token: "",
 };
 
+// Each destination type authenticates differently, so its API URL and auth
+// token mean different things — see the matching connector's module
+// docstring (app/connectors/destinations/{bitrix24,amocrm}.py) for the
+// authoritative contract this mirrors.
+const TYPE_HINTS = {
+  bitrix24: {
+    urlPlaceholder: "https://your-domain.bitrix24.ru",
+    urlHint: "Portal base URL, without /rest or the webhook path.",
+    tokenPlaceholder: "1/xxxxxxxxxxxxxxxx",
+    tokenHint: "Incoming webhook path: {user_id}/{webhook_code}.",
+  },
+  amocrm: {
+    urlPlaceholder: "https://your-domain.amocrm.ru",
+    urlHint: "Account base URL.",
+    tokenPlaceholder: undefined,
+    tokenHint: "Long-lived API token, sent as a Bearer token.",
+  },
+} as const;
+
 export function DestinationFormModal({
   open,
   onClose,
@@ -38,11 +57,14 @@ export function DestinationFormModal({
     handleSubmit,
     reset,
     setError,
+    watch,
     formState: { errors },
   } = useForm<DestinationFormValues>({
     resolver: zodResolver(destinationSchema),
     defaultValues: DEFAULT_VALUES,
   });
+
+  const hints = TYPE_HINTS[watch("type")];
 
   useEffect(() => {
     if (!open) return;
@@ -113,12 +135,12 @@ export function DestinationFormModal({
           label="API URL"
           htmlFor="destination-api-url"
           error={errors.api_url?.message}
-          hint="Base REST URL, e.g. https://your-domain.bitrix24.ru/rest/"
+          hint={hints.urlHint}
           required
         >
           <Input
             id="destination-api-url"
-            placeholder="https://your-domain.bitrix24.ru/rest/"
+            placeholder={hints.urlPlaceholder}
             {...register("api_url")}
           />
         </FormField>
@@ -127,17 +149,13 @@ export function DestinationFormModal({
           label="Auth token"
           htmlFor="destination-auth-token"
           error={errors.auth_token?.message}
-          hint={
-            isEditing
-              ? "Leave blank to keep the current token"
-              : "Webhook key or OAuth token"
-          }
+          hint={isEditing ? "Leave blank to keep the current token" : hints.tokenHint}
           required={!isEditing}
         >
           <Input
             id="destination-auth-token"
             type="password"
-            placeholder={isEditing ? "••••••••" : undefined}
+            placeholder={isEditing ? "••••••••" : hints.tokenPlaceholder}
             {...register("auth_token")}
           />
         </FormField>
