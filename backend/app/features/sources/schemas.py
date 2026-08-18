@@ -1,6 +1,7 @@
 """Pydantic schemas for Source entity."""
 
 from datetime import datetime
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, SecretStr, field_validator
 
@@ -68,3 +69,41 @@ class SourceListResponse(BaseModel):
     total: int
     skip: int
     limit: int
+
+
+class ConnectionTestResult(BaseModel):
+    """Result of a `test_connection()` call against a source's connector."""
+
+    success: bool
+    message: str
+
+
+class TableInfoRead(BaseModel):
+    """One table or view discovered on a source, for schema browsing."""
+
+    name: str
+    # Named schema_name (not schema) to avoid shadowing BaseModel.schema();
+    # the alias keeps the wire format ({"schema": "..."}) unaffected and
+    # still matches TableInfo.schema for from_attributes validation.
+    schema_name: str = Field(alias="schema")
+    kind: Literal["table", "view"]
+
+    model_config = {"from_attributes": True, "populate_by_name": True}
+
+
+class ColumnInfoRead(BaseModel):
+    """One column of a table/view, for interactive field-mapping."""
+
+    name: str
+    data_type: str
+    nullable: bool
+    is_primary_key: bool
+
+    model_config = {"from_attributes": True}
+
+
+class TablePreviewResponse(BaseModel):
+    """A small sample of rows read from a source table, for the mapping UI."""
+
+    columns: list[str]
+    rows: list[dict[str, Any]]

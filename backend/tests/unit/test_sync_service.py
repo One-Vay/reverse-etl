@@ -1,0 +1,153 @@
+"""Unit tests for SyncService, with repositories mocked.
+
+Regression coverage for a real bug: `next_run` used to be computed and
+then silently dropped, because it was stuffed into a `SyncUpdate(...)`
+object that had no `next_run` field — Pydantic's default `extra="ignore"`
+swallowed it with no error. Fixed by adding a dedicated
+`SyncRepository.update_next_run()`, mirroring the existing
+`update_last_run()`. These tests assert that method is actually called
+with a real, correctly-calculated datetime.
+"""
+
+from datetime import datetime, timezone
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
+from app.core.exceptions import ValidationError
+from app.features.syncs.models import Sync, SyncStatus
+from app.features.syncs.schemas import SyncCreate, SyncUpdate
+from app.features.syncs.service import SyncService
+
+
+def make_sync(**overrides) -> Sync:
+    sync = MagicMock(spec=Sync)
+    sync.id = overrides.get("id", 1)
+    sync.name = overrides.get("name", "Existing sync")
+    sync.source_id = overrides.get("source_id", 1)
+    sync.destination_id = overrides.get("destination_id", 1)
+    sync.mapping_id = overrides.get("mapping_id", 1)
+    sync.schedule = overrides.get("schedule", "*/30 * * * *")
+    sync.incremental_field = overrides.get("incremental_field", None)
+    sync.status = overrides.get("status", SyncStatus.ACTIVE)
+    # MagicMock(spec=Sync) still auto-generates these relationship attrs as
+    # further MagicMocks instead of raising, which then fails SyncRead's
+    # nested-schema validation — pin them to what an unloaded relation
+    # actually looks like.
+    sync.source = None
+    sync.destination = None
+    sync.mapping = None
+    return sync
+
+
+@pytest.fixture
+def repos():
+    sync_repo = MagicMock()
+    sync_repo.get_by_id = AsyncMock(return_value=make_sync())
+    sync_repo.create = AsyncMock(return_value=make_sync())
+    sync_repo.update = AsyncMock(return_value=make_sync())
+    sync_repo.update_last_run = AsyncMock(return_value=make_sync())
+    sync_repo.update_next_run = AsyncMock(return_value=make_sync())
+
+    source_repo = MagicMock()
+    source_repo.get_by_id = AsyncMock(return_value=MagicMock(id=1))
+
+    destination_repo = MagicMock()
+    destination_repo.get_by_id = AsyncMock(return_value=MagicMock(id=1))
+
+    mapping_repo = MagicMock()
+    mapping_repo.get_by_id = AsyncMock(return_value=MagicMock(id=1, source_id=1))
+
+    return sync_repo, source_repo, destination_repo, mapping_repo
+
+
+@pytest.fixture
+def service(repos):
+    sync_repo, source_repo, destination_repo, mapping_repo = repos
+    return SyncService(sync_repo, source_repo, destination_repo, mapping_repo)
+
+
+class TestCreate:
+    @pytest.mark.asyncio
+    async def test_persists_the_calculated_next_run(self, service, repos):
+        sync_repo, *_ = repos
+        data = SyncCreate(
+            name="Hourly sync",
+            source_id=1,
+            destination_id=1,
+            mapping_id=1,
+            schedule="0 * * * *",
+        )
+
+        await service.create(data)
+
+        sync_repo.update_next_run.assert_awaited_once()
+        call_id, call_next_run = sync_repo.update_next_run.call_args.args
+        assert call_id == 1
+        assert isinstance(call_next_run, datetime)
+        assert call_next_run > datetime.now(timezone.utc)
+
+
+class TestUpdate:
+    @pytest.mark.asyncio
+    async def test_recalculates_next_run_when_schedule_changes(self, service, repos):
+        sync_repo, *_ = repos
+
+        await service.update(1, SyncUpdate(schedule="0 0 * * *"))
+
+        sync_repo.update_next_run.assert_awaited_once()
+        call_id, call_next_run = sync_repo.update_next_run.call_args.args
+        assert call_id == 1
+        assert isinstance(call_next_run, datetime)
+
+    @pytest.mark.asyncio
+    async def test_does_not_touch_next_run_for_unrelated_field_changes(
+        self, service, repos
+    ):
+        sync_repo, *_ = repos
+
+        await service.update(1, SyncUpdate(name="Renamed"))
+
+        sync_repo.update_next_run.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_rejects_an_invalid_schedule(self, service):
+        with pytest.raises(ValidationError):
+            await service.update(1, SyncUpdate(schedule="not a cron expression"))
+
+
+class TestRunNow:
+    @pytest.mark.asyncio
+    async def test_updates_last_run_and_next_run(self, service, repos):
+        sync_repo, *_ = repos
+
+        await service.run_now(1)
+
+        sync_repo.update_last_run.assert_awaited_once()
+        sync_repo.update_next_run.assert_awaited_once()
+        call_id, call_next_run = sync_repo.update_next_run.call_args.args
+        assert call_id == 1
+        assert isinstance(call_next_run, datetime)
+
+
+class TestGetListStatusFilter:
+    @pytest.mark.asyncio
+    async def test_parses_a_valid_status_string(self, service, repos):
+        sync_repo, *_ = repos
+        sync_repo.get_count = AsyncMock(return_value=0)
+        sync_repo.get_all = AsyncMock(return_value=[])
+
+        await service.get_list(status="paused")
+
+        sync_repo.get_count.assert_awaited_once_with(
+            source_id=None,
+            destination_id=None,
+            mapping_id=None,
+            status=SyncStatus.PAUSED,
+            search=None,
+        )
+
+    @pytest.mark.asyncio
+    async def test_rejects_an_invalid_status_string(self, service):
+        with pytest.raises(ValidationError, match="archived"):
+            await service.get_list(status="archived")

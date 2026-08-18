@@ -35,19 +35,24 @@ async def list_syncs(
     source_id: int | None = None,
     destination_id: int | None = None,
     mapping_id: int | None = None,
-    status: str | None = None,
+    sync_status: str | None = Query(None, alias="status"),
     search: str | None = None,
     service: SyncService = Depends(get_sync_service),
 ):
-    return await service.get_list(
-        skip=skip,
-        limit=limit,
-        source_id=source_id,
-        destination_id=destination_id,
-        mapping_id=mapping_id,
-        status=status,
-        search=search,
-    )
+    try:
+        return await service.get_list(
+            skip=skip,
+            limit=limit,
+            source_id=source_id,
+            destination_id=destination_id,
+            mapping_id=mapping_id,
+            status=sync_status,
+            search=search,
+        )
+    except ValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
+        )
 
 
 @router.get("/{id}", response_model=SyncRead)

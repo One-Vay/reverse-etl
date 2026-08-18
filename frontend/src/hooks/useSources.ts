@@ -82,3 +82,49 @@ export function useDeleteSource() {
     },
   });
 }
+
+/** Tables/views visible on a source, for the mapping form's table picker.
+ * Disabled until `sourceId` is set (e.g. no source chosen yet). */
+export function useSourceTables(sourceId: number | undefined) {
+  return useQuery({
+    queryKey: queryKeys.sourceTables(sourceId ?? 0),
+    queryFn: () => sourcesApi.listTables(sourceId as number),
+    enabled: sourceId != null && sourceId > 0,
+    staleTime: 60_000,
+  });
+}
+
+/** Columns of one table on a source, for the mapping form's column picker.
+ * Disabled until both `sourceId` and `tableName` are set. */
+export function useSourceTableSchema(
+  sourceId: number | undefined,
+  tableName: string | undefined,
+  schema = "public",
+) {
+  return useQuery({
+    queryKey: queryKeys.sourceTableSchema(sourceId ?? 0, tableName ?? "", schema),
+    queryFn: () =>
+      sourcesApi.getTableSchema(sourceId as number, tableName as string, schema),
+    enabled: sourceId != null && sourceId > 0 && !!tableName,
+    staleTime: 60_000,
+  });
+}
+
+/** Tests a source's stored credentials. Resolves with `{success, message}`
+ * even on failed connections — only rejects for app-level errors (source
+ * not found, connector not implemented, network failure), which is when
+ * the error toast fires. */
+export function useTestSourceConnection() {
+  const { showToast } = useToast();
+
+  return useMutation({
+    mutationFn: (id: number) => sourcesApi.testConnection(id),
+    onError: (error) => {
+      showToast({
+        variant: "error",
+        title: "Couldn't test connection",
+        description: getErrorMessage(error),
+      });
+    },
+  });
+}

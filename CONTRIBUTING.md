@@ -21,10 +21,12 @@ frontend/   React + TypeScript + Vite application
    source venv/bin/activate  # Windows: venv\Scripts\activate
    ```
 
-2. Install dependencies:
+2. Install dependencies. `requirements-dev.txt` pulls in `requirements.txt`
+   plus test tooling (pytest, ruff, testcontainers) — use it for local dev.
+   The Docker image installs only `requirements.txt` (runtime deps):
 
    ```bash
-   pip install -r requirements.txt
+   pip install -r requirements-dev.txt
    ```
 
 3. Copy the environment template and fill in real values:
@@ -59,22 +61,42 @@ We follow [GitHub Flow](https://docs.github.com/en/get-started/using-github/gith
 
 ## Before opening a Pull Request
 
-Run the full backend check suite locally — this mirrors what CI runs:
+Run the full check suite locally — this mirrors every job in
+[`.github/workflows/test.yml`](.github/workflows/test.yml). A change that
+only passes some of these will fail CI:
 
 ```bash
 cd backend
 ruff check .
 ruff format --check .
+mypy app
 pytest --cov=app
+pytest tests/integration -m integration -v   # requires Docker
 ```
 
-All three must pass. If `ruff format --check` fails, run `ruff format .` to
-apply the fixes automatically.
+```bash
+cd frontend
+npm run lint
+npm run typecheck
+npm run format:check
+npm run test
+npm run build
+```
+
+If `ruff format --check` or `npm run format:check` fails, run `ruff format .`
+/ `npm run format` to apply the fixes automatically.
+
+There used to be a second, separate CI workflow (`ci.yml`) that duplicated
+`test.yml` with a different, half-configured job set (no `mypy` config, no
+`Vitest` setup) — it failed on every push silently enough that it was easy
+to miss. It's been folded into the single workflow above; don't recreate a
+second one.
 
 ## Code style
 
-- Python code is formatted and linted with [Ruff](https://docs.astral.sh/ruff/);
-  configuration lives in [`pyproject.toml`](pyproject.toml).
+- Python code is formatted and linted with [Ruff](https://docs.astral.sh/ruff/)
+  and type-checked with [mypy](https://mypy.readthedocs.io/); configuration
+  for both lives in [`pyproject.toml`](pyproject.toml).
 - Favor small, single-purpose functions and explicit types (`Mapped[...]`
   annotations, Pydantic schemas) over implicit behavior.
 - Only add comments/docstrings where the *why* isn't obvious from the code —
@@ -82,6 +104,11 @@ apply the fixes automatically.
 - Database schema changes must ship with an Alembic migration
   (`alembic revision --autogenerate -m "..."`) and must not be edited after
   they've been merged to `main`.
+- A Pydantic model's fields must match what code actually sets on it —
+  passing an unrecognized keyword argument doesn't raise (Pydantic v2
+  defaults to `extra="ignore"`), it's silently dropped. This bit us once
+  (`SyncUpdate(next_run=...)` never persisted); `mypy`'s `call-arg` check is
+  what would have caught it, which is why it's part of CI.
 
 ## Tests
 
@@ -89,6 +116,18 @@ apply the fixes automatically.
   `backend/tests/unit/`, following the existing mock-based service/repository
   pattern in `backend/tests/conftest.py`.
 - Test files must be named `test_*.py` so `pytest` can discover them.
+- Connectors (`backend/app/connectors/`) get two layers of tests:
+  - **Unit tests** (`backend/tests/unit/connectors/`) mock the driver
+    (e.g. `asyncpg`) entirely — no Docker needed, run as part of `pytest`.
+  - **Integration tests** (`backend/tests/integration/`) spin up the real
+    system via [testcontainers](https://testcontainers-python.readthedocs.io/)
+    and are marked `@pytest.mark.integration`, which excludes them from the
+    default `pytest` run (see `addopts` in `pyproject.toml`). They require
+    Docker; run them explicitly before merging any connector change:
+
+    ```bash
+    pytest tests/integration -m integration -v
+    ```
 
 ## Reporting bugs / requesting features
 

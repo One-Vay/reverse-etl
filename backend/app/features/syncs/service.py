@@ -8,6 +8,7 @@ from app.core.exceptions import NotFoundError, ValidationError
 from app.features.destinations.repository import DestinationRepository
 from app.features.mappings.repository import MappingRepository
 from app.features.sources.repository import SourceRepository
+from app.features.syncs.models import SyncStatus
 from app.features.syncs.repository import SyncRepository
 from app.features.syncs.schemas import (
     SyncCreate,
@@ -15,6 +16,16 @@ from app.features.syncs.schemas import (
     SyncRead,
     SyncUpdate,
 )
+
+
+def _parse_status(status: str | None) -> SyncStatus | None:
+    if status is None:
+        return None
+    try:
+        return SyncStatus(status)
+    except ValueError:
+        valid = ", ".join(s.value for s in SyncStatus)
+        raise ValidationError(f"Invalid status '{status}'. Must be one of: {valid}")
 
 
 class SyncService:
@@ -48,11 +59,12 @@ class SyncService:
         status: str | None = None,
         search: str | None = None,
     ) -> SyncListResponse:
+        parsed_status = _parse_status(status)
         total = await self.repository.get_count(
             source_id=source_id,
             destination_id=destination_id,
             mapping_id=mapping_id,
-            status=status,
+            status=parsed_status,
             search=search,
         )
         items = await self.repository.get_all(
@@ -61,7 +73,7 @@ class SyncService:
             source_id=source_id,
             destination_id=destination_id,
             mapping_id=mapping_id,
-            status=status,
+            status=parsed_status,
             search=search,
         )
         return SyncListResponse(
@@ -99,9 +111,8 @@ class SyncService:
         next_run = self._calculate_next_run(data.schedule)
 
         sync = await self.repository.create(data)
-        # Update next_run separately (or include in create)
         if next_run:
-            await self.repository.update(sync.id, SyncUpdate(next_run=next_run))
+            sync = await self.repository.update_next_run(sync.id, next_run) or sync
         return SyncRead.model_validate(sync)
 
     async def update(self, id: int, data: SyncUpdate) -> SyncRead:
@@ -139,17 +150,19 @@ class SyncService:
         if data.schedule is not None and not self._is_valid_cron(data.schedule):
             raise ValidationError(f"Invalid schedule format: '{data.schedule}'")
 
-        # Calculate next_run if schedule changed
-        schedule = data.schedule or existing.schedule
-        next_run = self._calculate_next_run(schedule)
-
-        update_dict = data.model_dump(exclude_unset=True)
-        if next_run:
-            update_dict["next_run"] = next_run
-
-        sync = await self.repository.update(id, SyncUpdate(**update_dict))
+        sync = await self.repository.update(id, data)
         if not sync:
             raise NotFoundError(f"Sync with id {id} not found")
+
+        # Recalculate next_run if the schedule changed. Kept as a separate
+        # update_next_run() call (like update_last_run()) rather than a field
+        # on SyncUpdate, since next_run is server-computed, not part of the
+        # public update payload.
+        if data.schedule is not None:
+            next_run = self._calculate_next_run(data.schedule)
+            if next_run:
+                sync = await self.repository.update_next_run(id, next_run) or sync
+
         return SyncRead.model_validate(sync)
 
     async def delete(self, id: int) -> None:
@@ -170,7 +183,7 @@ class SyncService:
         # Calculate next_run based on schedule
         next_run = self._calculate_next_run(sync.schedule)
         if next_run:
-            await self.repository.update(id, SyncUpdate(next_run=next_run))
+            await self.repository.update_next_run(id, next_run)
 
     @staticmethod
     def _is_valid_cron(schedule: str) -> bool:
@@ -185,7 +198,7 @@ class SyncService:
     def _calculate_next_run(schedule: str) -> datetime | None:
         """Calculate the next run time based on cron schedule."""
         try:
-            cron = croniter.croniter(schedule, datetime.utcnow())
+            cron = croniter.croniter(schedule, datetime.now(timezone.utc))
             return cron.get_next(datetime)
         except Exception:
             return None

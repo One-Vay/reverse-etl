@@ -13,11 +13,32 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from app.core.config import settings
 
+
+def build_engine_kwargs(
+    database_url: str, *, debug: bool, pool_size: int, max_overflow: int
+) -> dict[str, object]:
+    """Build the kwargs for `create_async_engine()`.
+
+    `pool_size`/`max_overflow` only apply to `QueuePool` (used for Postgres).
+    SQLite's async driver defaults to `NullPool`, which doesn't accept either
+    kwarg and raises `TypeError` if given them — so they're only included for
+    non-SQLite URLs (e.g. the sqlite+aiosqlite URL used in tests and CI).
+    """
+    kwargs: dict[str, object] = {"echo": debug}
+    if not database_url.startswith("sqlite"):
+        kwargs["pool_size"] = pool_size
+        kwargs["max_overflow"] = max_overflow
+    return kwargs
+
+
 engine = create_async_engine(
     settings.DATABASE_URL,
-    echo=settings.DEBUG,
-    pool_size=settings.DB_POOL_SIZE,
-    max_overflow=settings.DB_MAX_OVERFLOW,
+    **build_engine_kwargs(
+        settings.DATABASE_URL,
+        debug=settings.DEBUG,
+        pool_size=settings.DB_POOL_SIZE,
+        max_overflow=settings.DB_MAX_OVERFLOW,
+    ),
 )
 
 AsyncSessionLocal = async_sessionmaker(

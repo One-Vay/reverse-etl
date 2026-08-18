@@ -1,5 +1,9 @@
 """Service layer for Source entity."""
 
+from typing import Any
+
+from app.connectors.base import ColumnSchema, SourceConnector, TableInfo
+from app.connectors.factory import ConnectorFactory
 from app.core.exceptions import ConflictError, NotFoundError
 from app.core.security import decrypt_password, encrypt_password
 from app.features.sources.repository import SourceRepository
@@ -16,6 +20,83 @@ class SourceService:
 
     def __init__(self, repository: SourceRepository):
         self.repository = repository
+
+    async def _build_connector(self, id: int) -> SourceConnector:
+        """Look up a source and build a connector for it, with its
+        password decrypted. Raises NotFoundError if the source doesn't
+        exist; propagates UnknownConnectorTypeError from the factory if
+        the source's type has no connector registered."""
+        source = await self.repository.get_by_id(id)
+        if not source:
+            raise NotFoundError(f"Source with id {id} not found")
+
+        password = decrypt_password(source.password)
+        return ConnectorFactory.create_source_connector(
+            source.type,
+            host=source.host,
+            port=source.port,
+            database=source.database,
+            username=source.username,
+            password=password,
+        )
+
+    async def test_connection(self, id: int) -> None:
+        """Verify a source's stored credentials by opening a real connection.
+
+        Raises:
+            NotFoundError: If the source doesn't exist.
+            ConnectionFailedError: If the connection attempt fails.
+        """
+        connector = await self._build_connector(id)
+        async with connector:
+            await connector.test_connection()
+
+    async def get_tables(self, id: int) -> list[TableInfo]:
+        """List the tables/views visible to a source's connection.
+
+        Raises:
+            NotFoundError: If the source doesn't exist.
+            ConnectionFailedError: If the connection attempt fails.
+        """
+        connector = await self._build_connector(id)
+        async with connector:
+            return await connector.get_tables()
+
+    async def get_table_schema(
+        self, id: int, table_name: str, schema: str
+    ) -> list[ColumnSchema]:
+        """Describe the columns of one table/view on a source.
+
+        Raises:
+            NotFoundError: If the source doesn't exist.
+            TableNotFoundError: If the table/view doesn't exist.
+            ConnectionFailedError: If the connection attempt fails.
+        """
+        connector = await self._build_connector(id)
+        async with connector:
+            return await connector.get_table_schema(table_name, schema)
+
+    async def preview_table(
+        self,
+        id: int,
+        table_name: str,
+        schema: str,
+        columns: list[str] | None,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        """Fetch a small sample of rows from a source table, for preview
+        while building a mapping.
+
+        Raises:
+            NotFoundError: If the source doesn't exist.
+            TableNotFoundError: If the table/view doesn't exist.
+            ConnectionFailedError: If the connection attempt fails.
+        """
+        connector = await self._build_connector(id)
+        async with connector:
+            return await connector.fetch_data(
+                table_name, columns=columns, schema=schema, limit=limit
+            )
 
     async def get(self, id: int) -> SourceRead:
         """Get a source by ID."""

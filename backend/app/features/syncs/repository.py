@@ -135,11 +135,19 @@ class SyncRepository:
     async def delete(self, id: int) -> bool:
         stmt = delete(Sync).where(Sync.id == id)
         result = await self.session.execute(stmt)
-        return result.rowcount > 0
+        return result.rowcount > 0  # type: ignore[attr-defined]  # CursorResult at runtime
 
     async def update_last_run(self, id: int, last_run: datetime) -> Sync | None:
         stmt = (
             update(Sync).where(Sync.id == id).values(last_run=last_run).returning(Sync)
+        )
+        result = await self.session.execute(stmt)
+        await self.session.flush()
+        return result.scalar_one_or_none()
+
+    async def update_next_run(self, id: int, next_run: datetime) -> Sync | None:
+        stmt = (
+            update(Sync).where(Sync.id == id).values(next_run=next_run).returning(Sync)
         )
         result = await self.session.execute(stmt)
         await self.session.flush()
