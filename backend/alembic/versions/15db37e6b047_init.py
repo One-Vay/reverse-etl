@@ -30,8 +30,18 @@ def upgrade() -> None:
         sa.Column("database", sa.String(length=255), nullable=False),
         sa.Column("username", sa.String(length=255), nullable=False),
         sa.Column("password", sa.String(length=255), nullable=False),
-        sa.Column("created_at", sa.DateTime(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(op.f("ix_sources_id"), "sources", ["id"], unique=False)

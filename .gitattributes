@@ -1,0 +1,6 @@
+# Force LF line endings for files that get executed or parsed inside Linux
+# containers, regardless of core.autocrlf on the checkout machine.
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.dockerignore text eol=lf
+docker-compose*.yml text eol=lf

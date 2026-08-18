@@ -1,0 +1,114 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 150 25% 98%;
+    --foreground: 160 15% 12%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 160 15% 12%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 160 15% 12%;
+
+    --primary: 152 45% 36%;
+    --primary-foreground: 150 40% 98%;
+
+    --secondary: 150 22% 94%;
+    --secondary-foreground: 160 15% 20%;
+
+    --muted: 150 20% 95%;
+    --muted-foreground: 160 10% 42%;
+
+    --accent: 150 30% 91%;
+    --accent-foreground: 160 15% 15%;
+
+    --destructive: 4 72% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 152 45% 36%;
+    --warning: 38 92% 46%;
+
+    --border: 150 16% 87%;
+    --input: 150 16% 87%;
+    --ring: 152 45% 36%;
+
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    --background: 160 22% 7%;
+    --foreground: 150 15% 92%;
+
+    --card: 160 18% 10%;
+    --card-foreground: 150 15% 92%;
+
+    --popover: 160 20% 9%;
+    --popover-foreground: 150 15% 92%;
+
+    --primary: 152 42% 50%;
+    --primary-foreground: 160 30% 8%;
+
+    --secondary: 160 14% 15%;
+    --secondary-foreground: 150 15% 92%;
+
+    --muted: 160 14% 14%;
+    --muted-foreground: 150 10% 62%;
+
+    --accent: 160 16% 17%;
+    --accent-foreground: 150 15% 92%;
+
+    --destructive: 4 68% 56%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 152 42% 50%;
+    --warning: 38 88% 55%;
+
+    --border: 160 14% 19%;
+    --input: 160 14% 19%;
+    --ring: 152 42% 50%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family:
+      "Inter",
+      ui-sans-serif,
+      system-ui,
+      -apple-system,
+      "Segoe UI",
+      Roboto,
+      sans-serif;
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--border));
+    border-radius: 999px;
+  }
+}
