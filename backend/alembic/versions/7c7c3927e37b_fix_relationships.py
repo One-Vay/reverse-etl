@@ -26,8 +26,18 @@ def upgrade() -> None:
         sa.Column("type", sa.String(length=50), nullable=False),
         sa.Column("api_url", sa.String(length=255), nullable=False),
         sa.Column("auth_token", sa.String(length=255), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(op.f("ix_destinations_id"), "destinations", ["id"], unique=False)
@@ -41,8 +51,18 @@ def upgrade() -> None:
         sa.Column("source_table", sa.String(length=255), nullable=False),
         sa.Column("destination_entity", sa.String(length=255), nullable=False),
         sa.Column("field_mappings", sa.JSON(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(["source_id"], ["sources.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
@@ -63,8 +83,18 @@ def upgrade() -> None:
         sa.Column("last_run", sa.DateTime(timezone=True), nullable=True),
         sa.Column("next_run", sa.DateTime(timezone=True), nullable=True),
         sa.Column("status", sa.String(length=20), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(["source_id"], ["sources.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(
             ["destination_id"], ["destinations.id"], ondelete="CASCADE"
