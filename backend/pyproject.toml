@@ -1,2 +1,19 @@
 [tool.ruff.lint.per-file-ignores]
 "backend/app/**/router.py" = ["B008"]
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: requires Docker (spins up real containers via testcontainers); excluded by default, run with -m integration",
+]
+# Integration tests are opt-in: run `pytest -m integration tests/integration`.
+addopts = "-m 'not integration'"
+
+[tool.mypy]
+python_version = "3.12"
+warn_unused_configs = true
+
+# asyncpg ships no py.typed marker / stubs (as of the pinned version); there
+# is no separate stub package to install, so this is the standard mitigation.
+[[tool.mypy.overrides]]
+module = "asyncpg.*"
+ignore_missing_imports = true

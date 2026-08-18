@@ -98,6 +98,29 @@ export interface SyncInput {
   status?: SyncStatus;
 }
 
+export interface TableInfo {
+  name: string;
+  schema: string;
+  kind: "table" | "view";
+}
+
+export interface ColumnInfo {
+  name: string;
+  data_type: string;
+  nullable: boolean;
+  is_primary_key: boolean;
+}
+
+export interface ConnectionTestResult {
+  success: boolean;
+  message: string;
+}
+
+export interface TablePreview {
+  columns: string[];
+  rows: Record<string, unknown>[];
+}
+
 export interface ListResponse<T> {
   items: T[];
   total: number;

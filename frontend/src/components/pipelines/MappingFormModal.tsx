@@ -1,9 +1,11 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useEffect } from "react";
-import { useForm } from "react-hook-form";
+import { useEffect, useState } from "react";
+import { useFieldArray, useForm } from "react-hook-form";
 
-import type { Mapping, Source } from "@/api/types";
+import type { Mapping, Source, TableInfo } from "@/api/types";
 import { FieldMappingsEditor } from "@/components/pipelines/FieldMappingsEditor";
+import { SourceColumnPicker } from "@/components/pipelines/SourceColumnPicker";
+import { SourceTablePicker } from "@/components/pipelines/SourceTablePicker";
 import { Button } from "@/components/ui/Button";
 import { FormField } from "@/components/ui/FormField";
 import { Input } from "@/components/ui/Input";
@@ -39,9 +41,17 @@ export function MappingFormModal({
   const createMapping = useCreateMapping();
   const updateMapping = useUpdateMapping();
 
+  // Schema of the currently-picked table, kept client-side only — the
+  // Mapping entity itself just stores a table name (see backend model), so
+  // this exists purely to fetch the right table's columns when the source
+  // has non-public schemas.
+  const [tableSchema, setTableSchema] = useState("public");
+
   const {
     register,
     control,
+    watch,
+    setValue,
     handleSubmit,
     reset,
     formState: { errors },
@@ -50,8 +60,15 @@ export function MappingFormModal({
     defaultValues: defaultValues(sources),
   });
 
+  const { fields, append, remove } = useFieldArray({ control, name: "field_mappings" });
+
+  const sourceId = watch("source_id");
+  const sourceTable = watch("source_table");
+  const fieldMappings = watch("field_mappings");
+
   useEffect(() => {
     if (!open) return;
+    setTableSchema("public");
     reset(
       mapping
         ? {
@@ -68,6 +85,15 @@ export function MappingFormModal({
         : defaultValues(sources),
     );
   }, [open, mapping, sources, reset]);
+
+  const handleSelectTable = (table: TableInfo) => {
+    setValue("source_table", table.name, { shouldValidate: true, shouldDirty: true });
+    setTableSchema(table.schema);
+  };
+
+  const handlePickColumn = (columnName: string) => {
+    append({ source_field: columnName, destination_field: "", transformation: "" });
+  };
 
   const isSaving = createMapping.isPending || updateMapping.isPending;
 
@@ -158,9 +184,28 @@ export function MappingFormModal({
           </FormField>
         </div>
 
+        <SourceTablePicker
+          sourceId={sourceId}
+          selectedTable={sourceTable}
+          onSelect={handleSelectTable}
+        />
+
+        <SourceColumnPicker
+          sourceId={sourceId}
+          table={sourceTable || undefined}
+          schema={tableSchema}
+          usedColumns={fieldMappings.map((fm) => fm.source_field)}
+          onPick={handlePickColumn}
+        />
+
         <FieldMappingsEditor
           control={control}
           register={register}
+          watch={watch}
+          setValue={setValue}
+          fields={fields}
+          append={append}
+          remove={remove}
           error={errors.field_mappings}
         />
 

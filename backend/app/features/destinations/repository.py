@@ -82,4 +82,4 @@ class DestinationRepository:
     async def delete(self, id: int) -> bool:
         stmt = delete(Destination).where(Destination.id == id)
         result = await self.session.execute(stmt)
-        return result.rowcount > 0
+        return result.rowcount > 0  # type: ignore[attr-defined]  # CursorResult at runtime
