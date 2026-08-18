@@ -157,6 +157,7 @@ export function PipelinesPage() {
         onClose={() => setMappingModal({ open: false })}
         mapping={mappingModal.mapping}
         sources={sources}
+        destinations={destinations}
       />
       <SyncFormModal
         open={syncModal.open}

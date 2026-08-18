@@ -9,6 +9,7 @@ asyncpg==0.30.0
 aiosqlite==0.19.0  # for tests
 alembic==1.13.0
 psycopg2-binary==2.9.9  # for Alembic sync mode
+clickhouse-connect[async]==1.7.1
 
 # Configuration & Validation
 pydantic==2.9.0
@@ -25,3 +26,4 @@ croniter==2.0.0  # for cron validation and next_run calculation
 # Other
 python-multipart==0.0.20  # for form data
 greenlet==3.0.3  # required for async SQLAlchemy
+httpx==0.28.1  # REST client for Bitrix24/AmoCRM destination connectors

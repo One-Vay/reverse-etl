@@ -2,9 +2,10 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useEffect, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 
-import type { Mapping, Source, TableInfo } from "@/api/types";
+import type { Destination, Mapping, Source, TableInfo } from "@/api/types";
+import { DestinationEntityPicker } from "@/components/pipelines/DestinationEntityPicker";
 import { FieldMappingsEditor } from "@/components/pipelines/FieldMappingsEditor";
-import { SourceColumnPicker } from "@/components/pipelines/SourceColumnPicker";
+import { MappingBoard } from "@/components/pipelines/MappingBoard";
 import { SourceTablePicker } from "@/components/pipelines/SourceTablePicker";
 import { Button } from "@/components/ui/Button";
 import { FormField } from "@/components/ui/FormField";
@@ -19,6 +20,7 @@ interface MappingFormModalProps {
   onClose: () => void;
   mapping?: Mapping | null;
   sources: Source[];
+  destinations: Destination[];
 }
 
 function defaultValues(sources: Source[]): MappingFormValues {
@@ -36,6 +38,7 @@ export function MappingFormModal({
   onClose,
   mapping,
   sources,
+  destinations,
 }: MappingFormModalProps) {
   const isEditing = Boolean(mapping);
   const createMapping = useCreateMapping();
@@ -46,6 +49,14 @@ export function MappingFormModal({
   // this exists purely to fetch the right table's columns when the source
   // has non-public schemas.
   const [tableSchema, setTableSchema] = useState("public");
+
+  // Which destination to browse entities/fields from, kept client-side
+  // only — a Mapping doesn't store a destination_id (that binding happens
+  // at the Sync level), so this exists purely to power the entity/field
+  // pickers below.
+  const [destinationId, setDestinationId] = useState<number | undefined>(
+    destinations[0]?.id,
+  );
 
   const {
     register,
@@ -69,6 +80,7 @@ export function MappingFormModal({
   useEffect(() => {
     if (!open) return;
     setTableSchema("public");
+    setDestinationId(destinations[0]?.id);
     reset(
       mapping
         ? {
@@ -84,15 +96,39 @@ export function MappingFormModal({
           }
         : defaultValues(sources),
     );
-  }, [open, mapping, sources, reset]);
+  }, [open, mapping, sources, destinations, reset]);
 
   const handleSelectTable = (table: TableInfo) => {
     setValue("source_table", table.name, { shouldValidate: true, shouldDirty: true });
     setTableSchema(table.schema);
   };
 
-  const handlePickColumn = (columnName: string) => {
-    append({ source_field: columnName, destination_field: "", transformation: "" });
+  const handleSelectEntity = (entity: string) => {
+    setValue("destination_entity", entity, { shouldValidate: true, shouldDirty: true });
+  };
+
+  /** Links a source column to a destination field. Re-points the column's
+   * existing row if it's already mapped, instead of creating a duplicate. */
+  const handleConnectFields = (sourceField: string, destinationField: string) => {
+    const existingIndex = fields.findIndex((f) => f.source_field === sourceField);
+    if (existingIndex >= 0) {
+      setValue(`field_mappings.${existingIndex}.destination_field`, destinationField, {
+        shouldValidate: true,
+        shouldDirty: true,
+      });
+    } else {
+      append({
+        source_field: sourceField,
+        destination_field: destinationField,
+        transformation: "",
+      });
+    }
+  };
+
+  /** Removes whichever field mapping currently uses this source column. */
+  const handleDisconnectField = (sourceField: string) => {
+    const index = fields.findIndex((f) => f.source_field === sourceField);
+    if (index >= 0) remove(index);
   };
 
   const isSaving = createMapping.isPending || updateMapping.isPending;
@@ -184,18 +220,47 @@ export function MappingFormModal({
           </FormField>
         </div>
 
+        {destinations.length > 0 && (
+          <FormField
+            label="Destination to browse fields from"
+            htmlFor="mapping-destination-picker"
+            hint="Not saved on the mapping — only used to look up entity fields below."
+          >
+            <Select
+              id="mapping-destination-picker"
+              value={destinationId ?? ""}
+              onChange={(e) => setDestinationId(Number(e.target.value) || undefined)}
+            >
+              {destinations.map((destination) => (
+                <option key={destination.id} value={destination.id}>
+                  {destination.name}
+                </option>
+              ))}
+            </Select>
+          </FormField>
+        )}
+
         <SourceTablePicker
           sourceId={sourceId}
           selectedTable={sourceTable}
           onSelect={handleSelectTable}
         />
 
-        <SourceColumnPicker
+        <DestinationEntityPicker
+          destinationId={destinationId}
+          selectedEntity={watch("destination_entity")}
+          onSelect={handleSelectEntity}
+        />
+
+        <MappingBoard
           sourceId={sourceId}
           table={sourceTable || undefined}
           schema={tableSchema}
-          usedColumns={fieldMappings.map((fm) => fm.source_field)}
-          onPick={handlePickColumn}
+          destinationId={destinationId}
+          entity={watch("destination_entity") || undefined}
+          fieldMappings={fieldMappings}
+          onConnect={handleConnectFields}
+          onDisconnect={handleDisconnectField}
         />
 
         <FieldMappingsEditor

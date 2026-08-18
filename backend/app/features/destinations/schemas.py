@@ -59,3 +59,21 @@ class DestinationListResponse(BaseModel):
     total: int
     skip: int
     limit: int
+
+
+class ConnectionTestResult(BaseModel):
+    """Result of a `test_connection()` call against a destination's connector."""
+
+    success: bool
+    message: str
+
+
+class EntityFieldRead(BaseModel):
+    """One field of a destination entity, for interactive field-mapping."""
+
+    name: str
+    data_type: str
+    nullable: bool
+    is_primary_key: bool
+
+    model_config = {"from_attributes": True}
