@@ -90,9 +90,7 @@ export function MappingBoard({
   };
 
   if (columnsQuery.isPending || fieldsQuery.isPending) {
-    return (
-      <p className="text-xs text-muted-foreground">Loading fields to connect…</p>
-    );
+    return <p className="text-xs text-muted-foreground">Loading fields to connect…</p>;
   }
 
   if (columnsQuery.isError || fieldsQuery.isError) {
@@ -120,15 +118,13 @@ export function MappingBoard({
     <div className="flex flex-col gap-2 rounded-md border border-border p-3">
       <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
         <ArrowLeftRight className="h-3.5 w-3.5" />
-        Drag a source column onto a destination field, or click one of each to
-        connect them
+        Drag a source column onto a destination field, or click one of each to connect
+        them
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="flex flex-col gap-1.5">
-          <p className="text-xs font-medium text-muted-foreground">
-            {table} (source)
-          </p>
+          <p className="text-xs font-medium text-muted-foreground">{table} (source)</p>
           <div className="flex flex-wrap gap-1.5">
             {columns.map((column) => {
               const pairNumber = pairOrder.get(column.name);
@@ -227,8 +223,8 @@ export function MappingBoard({
 
       {armedSource && (
         <p className="text-xs text-primary">
-          "{armedSource}" selected — click a destination field to connect it, or click
-          it again to cancel.
+          "{armedSource}" selected — click a destination field to connect it, or click it
+          again to cancel.
         </p>
       )}
     </div>

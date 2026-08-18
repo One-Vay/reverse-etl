@@ -39,9 +39,7 @@ function renderWithClient(ui: ReactNode) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return render(
-    <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>,
-  );
+  return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
 }
 
 describe("MappingBoard", () => {
@@ -62,7 +60,12 @@ describe("MappingBoard", () => {
 
   it("renders nothing until a source table and destination entity are both chosen", () => {
     const { container } = renderWithClient(
-      <MappingBoard {...baseProps} table={undefined} onConnect={vi.fn()} onDisconnect={vi.fn()} />,
+      <MappingBoard
+        {...baseProps}
+        table={undefined}
+        onConnect={vi.fn()}
+        onDisconnect={vi.fn()}
+      />,
     );
     expect(container).toBeEmptyDOMElement();
   });

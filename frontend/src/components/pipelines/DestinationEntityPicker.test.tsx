@@ -20,9 +20,7 @@ function renderWithClient(ui: ReactNode) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return render(
-    <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>,
-  );
+  return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
 }
 
 describe("DestinationEntityPicker", () => {
@@ -68,9 +66,7 @@ describe("DestinationEntityPicker", () => {
   it("selects an entity and collapses the list", async () => {
     const user = userEvent.setup();
     const onSelect = vi.fn();
-    renderWithClient(
-      <DestinationEntityPicker destinationId={1} onSelect={onSelect} />,
-    );
+    renderWithClient(<DestinationEntityPicker destinationId={1} onSelect={onSelect} />);
 
     await user.click(screen.getByRole("button", { name: /browse entities/i }));
     await user.click(await screen.findByText("lead"));
