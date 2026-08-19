@@ -12,6 +12,17 @@ import httpx
 
 _API_BASE = "https://api.telegram.org"
 
+# Telegram returns this exact description when the bot has never
+# exchanged a message with the given chat ID — Telegram has no chat
+# record to send into yet, distinct from a wrong ID or a revoked token.
+# The fix is on the user's side (message the bot first), so surface that
+# instead of a bare API error string.
+_CHAT_NOT_FOUND_HINT = (
+    "Telegram doesn't recognize this chat ID yet. Open a chat with your bot "
+    "and send it any message (e.g. /start) first — Telegram only lets a bot "
+    "message chats it has already seen — then try the test again."
+)
+
 
 class TelegramError(Exception):
     """Raised when a message couldn't be sent. Callers are expected to
@@ -48,6 +59,8 @@ async def send_message(
             detail = response.json().get("description", response.text)
         except ValueError:
             detail = response.text
+        if "chat not found" in detail.lower():
+            raise TelegramError(_CHAT_NOT_FOUND_HINT)
         raise TelegramError(
             f"Telegram rejected the message (HTTP {response.status_code}): {detail}"
         )

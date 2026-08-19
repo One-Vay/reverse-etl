@@ -2,7 +2,15 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+
+def _strip(value: str | None) -> str | None:
+    """A pasted bot token/chat ID with stray leading/trailing whitespace
+    (easy to pick up copying from Telegram or a chat app) would otherwise
+    be sent to the API verbatim and fail with a confusing "chat not
+    found"/401 rather than the obviously-wrong value it actually is."""
+    return value.strip() if value is not None else value
 
 
 class AppSettingsUpdate(BaseModel):
@@ -21,6 +29,9 @@ class AppSettingsUpdate(BaseModel):
 
     default_connect_timeout_seconds: float | None = Field(None, gt=0, le=300)
     default_request_timeout_seconds: float | None = Field(None, gt=0, le=300)
+
+    _strip_telegram_bot_token = field_validator("telegram_bot_token")(_strip)
+    _strip_telegram_chat_id = field_validator("telegram_chat_id")(_strip)
 
 
 class AppSettingsRead(BaseModel):

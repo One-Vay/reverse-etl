@@ -74,3 +74,16 @@ class TestSendMessage:
         with patch("httpx.AsyncClient", return_value=mock_client):
             with pytest.raises(TelegramError, match="internal error"):
                 await send_message("123:abc", "999", "hello")
+
+    @pytest.mark.asyncio
+    async def test_gives_an_actionable_hint_for_chat_not_found(self, mock_client):
+        mock_client.post = AsyncMock(
+            return_value=make_response(
+                400,
+                {"description": "Bad Request: chat not found"},
+                text="Bad Request: chat not found",
+            )
+        )
+        with patch("httpx.AsyncClient", return_value=mock_client):
+            with pytest.raises(TelegramError, match="doesn't recognize this chat ID"):
+                await send_message("123:abc", "999", "hello")
