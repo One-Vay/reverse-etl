@@ -5,7 +5,7 @@ from datetime import datetime
 import pytest
 from httpx import AsyncClient
 
-from app.features.settings.schemas import AppSettingsRead, LLMStatus
+from app.features.settings.schemas import AppSettingsRead, LLMStatus, TelegramTestResult
 
 
 def make_settings(**overrides) -> AppSettingsRead:
@@ -15,6 +15,9 @@ def make_settings(**overrides) -> AppSettingsRead:
         "llm_enabled": False,
         "llm_base_url": "http://ollama:11434",
         "llm_model": "qwen2.5:0.5b",
+        "telegram_enabled": False,
+        "telegram_bot_token": "",
+        "telegram_chat_id": "",
         "default_connect_timeout_seconds": 10.0,
         "default_request_timeout_seconds": 30.0,
         "updated_at": datetime.now(),
@@ -75,3 +78,15 @@ async def test_pull_llm_model(client: AsyncClient, settings_service):
 
     assert response.status_code == 202
     settings_service.trigger_model_pull.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_send_telegram_test_message(client: AsyncClient, settings_service):
+    settings_service.send_telegram_test_message.return_value = TelegramTestResult(
+        success=True, detail="Test message sent."
+    )
+
+    response = await client.post("/api/v1/settings/telegram/test")
+
+    assert response.status_code == 200
+    assert response.json()["success"] is True

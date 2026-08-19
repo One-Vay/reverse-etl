@@ -3,7 +3,7 @@
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import and_, delete, desc, or_, select, update
+from sqlalchemy import and_, delete, desc, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.features.syncs.models import (
@@ -53,12 +53,7 @@ class SyncRepository:
         if status is not None:
             filters.append(Sync.status == status)
         if search:
-            filters.append(
-                or_(
-                    Sync.name.ilike(f"%{search}%"),
-                    Sync.schedule.ilike(f"%{search}%"),
-                )
-            )
+            filters.append(Sync.name.ilike(f"%{search}%"))
         if filters:
             stmt = stmt.where(and_(*filters))
         stmt = stmt.offset(skip).limit(limit).order_by(Sync.id)
@@ -84,12 +79,7 @@ class SyncRepository:
         if status is not None:
             filters.append(Sync.status == status)
         if search:
-            filters.append(
-                or_(
-                    Sync.name.ilike(f"%{search}%"),
-                    Sync.schedule.ilike(f"%{search}%"),
-                )
-            )
+            filters.append(Sync.name.ilike(f"%{search}%"))
         if filters:
             stmt = stmt.where(and_(*filters))
         result = await self.session.execute(stmt)
@@ -117,8 +107,9 @@ class SyncRepository:
 
     async def get_due(self, now: datetime) -> Sequence[Sync]:
         """Active syncs whose `next_run` has arrived — what the scheduler
-        picks up on each poll. A sync with `next_run is None` (e.g. an
-        unparseable schedule) is never due."""
+        picks up on each poll, regardless of how overdue: a sync whose
+        `next_run` passed while the process was down is still returned
+        here on the very first poll after restart."""
         stmt = select(Sync).where(
             Sync.status == SyncStatus.ACTIVE,
             Sync.next_run.is_not(None),
@@ -133,7 +124,9 @@ class SyncRepository:
             source_id=data.source_id,
             destination_id=data.destination_id,
             mapping_id=data.mapping_id,
-            schedule=data.schedule,
+            interval_value=data.interval_value,
+            interval_unit=data.interval_unit,
+            run_at_time=data.run_at_time,
             incremental_field=data.incremental_field,
             status=data.status,
         )

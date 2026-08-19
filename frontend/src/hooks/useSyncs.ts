@@ -4,7 +4,7 @@ import { syncsApi } from "@/api/syncs";
 import type { SyncInput, SyncStatus } from "@/api/types";
 import { useToast } from "@/context/ToastContext";
 import { queryKeys } from "@/lib/queryClient";
-import { getErrorMessage } from "@/lib/utils";
+import { formatSchedule, getErrorMessage } from "@/lib/utils";
 
 export function useSyncs() {
   return useQuery({
@@ -24,7 +24,7 @@ export function useCreateSync() {
       showToast({
         variant: "success",
         title: "Pipeline created",
-        description: `"${sync.name}" scheduled: ${sync.schedule}.`,
+        description: `"${sync.name}" scheduled: ${formatSchedule(sync)}.`,
       });
     },
     onError: (error) => {
@@ -179,5 +179,14 @@ export function useAllSyncRuns() {
   return useQuery({
     queryKey: queryKeys.allSyncRuns,
     queryFn: () => syncsApi.listAllRuns({ limit: 100 }),
+  });
+}
+
+/** Every active pipeline's projected fire times over the next `days` days —
+ * powers the dashboard's upcoming-runs calendar strip. */
+export function useUpcomingRuns(days = 7) {
+  return useQuery({
+    queryKey: queryKeys.upcomingSyncRuns(days),
+    queryFn: () => syncsApi.upcoming(days),
   });
 }

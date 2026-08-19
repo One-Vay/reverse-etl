@@ -1,5 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Download, Sparkles, Timer } from "lucide-react";
+import { Download, Send, Sparkles, Timer, MessageCircle } from "lucide-react";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 
@@ -10,7 +10,13 @@ import { FormField } from "@/components/ui/FormField";
 import { Input } from "@/components/ui/Input";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Switch } from "@/components/ui/Switch";
-import { useLLMStatus, usePullLLMModel, useSettings, useUpdateSettings } from "@/hooks/useSettings";
+import {
+  useLLMStatus,
+  usePullLLMModel,
+  useSendTelegramTestMessage,
+  useSettings,
+  useUpdateSettings,
+} from "@/hooks/useSettings";
 import { type SettingsFormValues, settingsSchema } from "@/lib/schemas";
 
 export function SettingsPage() {
@@ -32,6 +38,9 @@ export function SettingsPage() {
       llm_enabled: false,
       llm_base_url: "http://ollama:11434",
       llm_model: "qwen2.5:0.5b",
+      telegram_enabled: false,
+      telegram_bot_token: "",
+      telegram_chat_id: "",
       default_connect_timeout_seconds: 10,
       default_request_timeout_seconds: 30,
     },
@@ -43,9 +52,11 @@ export function SettingsPage() {
 
   const schedulerEnabled = watch("scheduler_enabled");
   const llmEnabled = watch("llm_enabled");
+  const telegramEnabled = watch("telegram_enabled");
 
   const llmStatusQuery = useLLMStatus(llmEnabled);
   const pullModel = usePullLLMModel();
+  const sendTelegramTest = useSendTelegramTestMessage();
 
   const onSubmit = async (values: SettingsFormValues) => {
     try {
@@ -199,6 +210,76 @@ export function SettingsPage() {
                     onClick={() => pullModel.mutate()}
                   >
                     <Download className="h-3.5 w-3.5" /> Pull model
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-1.5">
+                <MessageCircle className="h-4 w-4" /> Telegram notifications
+              </CardTitle>
+              <CardDescription>
+                Get a report in Telegram every time a scheduled pipeline run finishes —
+                including a warning when a run started late (e.g. after the container was
+                restarted).
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4">
+              <div className="flex items-center justify-between">
+                <label htmlFor="telegram-enabled" className="text-sm font-medium">
+                  Enabled
+                </label>
+                <Switch
+                  checked={telegramEnabled}
+                  onCheckedChange={(checked) =>
+                    setValue("telegram_enabled", checked, { shouldDirty: true })
+                  }
+                  label="Telegram notifications enabled"
+                />
+              </div>
+              <FormField
+                label="Bot token"
+                htmlFor="telegram-bot-token"
+                error={errors.telegram_bot_token?.message}
+                hint="From @BotFather, e.g. 123456:AAExample"
+              >
+                <Input
+                  id="telegram-bot-token"
+                  type="password"
+                  disabled={!telegramEnabled}
+                  {...register("telegram_bot_token")}
+                />
+              </FormField>
+              <FormField
+                label="Chat ID"
+                htmlFor="telegram-chat-id"
+                error={errors.telegram_chat_id?.message}
+                hint="Your user or group chat ID, e.g. 123456789"
+              >
+                <Input
+                  id="telegram-chat-id"
+                  disabled={!telegramEnabled}
+                  {...register("telegram_chat_id")}
+                />
+              </FormField>
+
+              {telegramEnabled && (
+                <div className="flex items-center justify-between rounded-md border border-border bg-muted/30 px-3 py-2 text-xs">
+                  <span className="text-muted-foreground">
+                    Uses the last saved token/chat ID — save first if you just changed
+                    them.
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    loading={sendTelegramTest.isPending}
+                    onClick={() => sendTelegramTest.mutate()}
+                  >
+                    <Send className="h-3.5 w-3.5" /> Send test message
                   </Button>
                 </div>
               )}

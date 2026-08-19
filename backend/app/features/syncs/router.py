@@ -16,6 +16,7 @@ from app.features.syncs.schemas import (
     SyncRunListResponse,
     SyncRunRead,
     SyncUpdate,
+    UpcomingSyncRuns,
 )
 from app.features.syncs.service import SyncService
 
@@ -68,6 +69,17 @@ async def list_all_sync_runs(
     the dashboard. Registered before `/{id}` so "runs" isn't parsed as an
     id."""
     return await service.get_all_runs(skip=skip, limit=limit)
+
+
+@router.get("/upcoming", response_model=list[UpcomingSyncRuns])
+async def list_upcoming_sync_runs(
+    days: int = Query(7, ge=1, le=30),
+    service: SyncService = Depends(get_sync_service),
+):
+    """Projected fire times for every active sync over the next `days`
+    days, for the dashboard's upcoming-runs calendar. Registered before
+    `/{id}` so "upcoming" isn't parsed as an id."""
+    return await service.get_upcoming(days=days)
 
 
 @router.get("/{id}", response_model=SyncRead)

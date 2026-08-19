@@ -54,6 +54,22 @@ export function getErrorMessage(error: unknown): string {
   return "Something went wrong. Please try again.";
 }
 
+/** Describe a sync's interval schedule for display, e.g. "Every 6 hours" or
+ * "Daily at 09:00". */
+export function formatSchedule(sync: {
+  interval_value: number;
+  interval_unit: "hours" | "days";
+  run_at_time: string | null;
+}): string {
+  if (sync.interval_unit === "hours") {
+    return sync.interval_value === 1 ? "Every hour" : `Every ${sync.interval_value} hours`;
+  }
+  const time = sync.run_at_time ?? "09:00";
+  return sync.interval_value === 1
+    ? `Daily at ${time}`
+    : `Every ${sync.interval_value} days at ${time}`;
+}
+
 /** Title-case a snake_case or lowercase identifier, e.g. "click_house" -> "Click House". */
 export function titleCase(value: string): string {
   return value

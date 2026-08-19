@@ -1,5 +1,7 @@
 """Service layer for Sync entity."""
 
+from datetime import datetime, timedelta, timezone
+
 from app.core.exceptions import NotFoundError, ValidationError
 from app.features.destinations.repository import DestinationRepository
 from app.features.mappings.repository import MappingRepository
@@ -7,7 +9,7 @@ from app.features.sources.repository import SourceRepository
 from app.features.syncs import runner
 from app.features.syncs.models import SyncRunTrigger, SyncStatus
 from app.features.syncs.repository import SyncRepository, SyncRunRepository
-from app.features.syncs.scheduling import calculate_next_run, is_valid_cron
+from app.features.syncs.scheduling import calculate_next_run, project_occurrences
 from app.features.syncs.schemas import (
     SyncCreate,
     SyncListResponse,
@@ -15,6 +17,7 @@ from app.features.syncs.schemas import (
     SyncRunListResponse,
     SyncRunRead,
     SyncUpdate,
+    UpcomingSyncRuns,
 )
 
 
@@ -105,16 +108,15 @@ class SyncService:
                 f"Mapping {data.mapping_id} does not belong to source {data.source_id}"
             )
 
-        # Validate schedule (cron expression)
-        if not is_valid_cron(data.schedule):
-            raise ValidationError(f"Invalid schedule format: '{data.schedule}'")
-
-        # Calculate next_run
-        next_run = calculate_next_run(data.schedule)
+        next_run = calculate_next_run(
+            data.interval_value,
+            data.interval_unit,
+            data.run_at_time,
+            anchor=datetime.now(timezone.utc),
+        )
 
         sync = await self.repository.create(data)
-        if next_run:
-            sync = await self.repository.update_next_run(sync.id, next_run) or sync
+        sync = await self.repository.update_next_run(sync.id, next_run) or sync
         return SyncRead.model_validate(sync)
 
     async def update(self, id: int, data: SyncUpdate) -> SyncRead:
@@ -148,9 +150,11 @@ class SyncService:
                     f"Mapping {data.mapping_id} does not belong to source {source_id}"
                 )
 
-        # Validate schedule if provided
-        if data.schedule is not None and not is_valid_cron(data.schedule):
-            raise ValidationError(f"Invalid schedule format: '{data.schedule}'")
+        schedule_changed = (
+            data.interval_value is not None
+            or data.interval_unit is not None
+            or data.run_at_time is not None
+        )
 
         sync = await self.repository.update(id, data)
         if not sync:
@@ -160,10 +164,14 @@ class SyncService:
         # update_next_run() call (like update_last_run()) rather than a field
         # on SyncUpdate, since next_run is server-computed, not part of the
         # public update payload.
-        if data.schedule is not None:
-            next_run = calculate_next_run(data.schedule)
-            if next_run:
-                sync = await self.repository.update_next_run(id, next_run) or sync
+        if schedule_changed:
+            next_run = calculate_next_run(
+                sync.interval_value,
+                sync.interval_unit,
+                sync.run_at_time,
+                anchor=datetime.now(timezone.utc),
+            )
+            sync = await self.repository.update_next_run(id, next_run) or sync
 
         return SyncRead.model_validate(sync)
 
@@ -219,3 +227,24 @@ class SyncService:
             skip=skip,
             limit=limit,
         )
+
+    async def get_upcoming(self, days: int = 7) -> list[UpcomingSyncRuns]:
+        """Projected fire times for every active sync over the next `days`
+        days, for the dashboard's upcoming-runs calendar."""
+        active = await self.repository.get_active()
+        within = timedelta(days=days)
+        return [
+            UpcomingSyncRuns(
+                sync_id=sync.id,
+                sync_name=sync.name,
+                occurrences=project_occurrences(
+                    sync.interval_value,
+                    sync.interval_unit,
+                    sync.run_at_time,
+                    starting_from=sync.next_run,
+                    within=within,
+                ),
+            )
+            for sync in active
+            if sync.next_run is not None
+        ]

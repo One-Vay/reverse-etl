@@ -4,6 +4,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { RunHistoryTable } from "@/components/dashboard/RunHistoryTable";
 import { SchedulerPanel } from "@/components/dashboard/SchedulerPanel";
 import { StatsCharts } from "@/components/dashboard/StatsCharts";
+import { UpcomingRunsTimeline } from "@/components/dashboard/UpcomingRunsTimeline";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { StatCard } from "@/components/ui/StatCard";
 import { useDestinations } from "@/hooks/useDestinations";
@@ -65,6 +66,10 @@ export function DashboardPage() {
 
       <div className="mt-4">
         <StatsCharts syncs={syncs} runs={runs} />
+      </div>
+
+      <div className="mt-4">
+        <UpcomingRunsTimeline />
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">

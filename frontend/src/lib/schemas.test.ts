@@ -106,7 +106,8 @@ describe("syncSchema", () => {
     source_id: 1,
     destination_id: 1,
     mapping_id: 1,
-    schedule: "0 * * * *",
+    interval_value: 1,
+    interval_unit: "hours",
   };
 
   it("accepts a valid sync and defaults status to active", () => {
@@ -115,8 +116,32 @@ describe("syncSchema", () => {
     if (result.success) expect(result.data.status).toBe("active");
   });
 
-  it("rejects a blank schedule", () => {
-    const result = syncSchema.safeParse({ ...validSync, schedule: "" });
+  it("rejects an interval value of 0", () => {
+    const result = syncSchema.safeParse({ ...validSync, interval_value: 0 });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects an hours interval above 168", () => {
+    const result = syncSchema.safeParse({ ...validSync, interval_value: 200 });
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts a days interval with a valid run_at_time", () => {
+    const result = syncSchema.safeParse({
+      ...validSync,
+      interval_unit: "days",
+      interval_value: 1,
+      run_at_time: "09:00",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects a malformed run_at_time", () => {
+    const result = syncSchema.safeParse({
+      ...validSync,
+      interval_unit: "days",
+      run_at_time: "not-a-time",
+    });
     expect(result.success).toBe(false);
   });
 

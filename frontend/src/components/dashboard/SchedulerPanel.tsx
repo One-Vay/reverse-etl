@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Switch } from "@/components/ui/Switch";
 import { useRunSyncNow, useToggleSyncStatus } from "@/hooks/useSyncs";
-import { formatRelativeTime } from "@/lib/utils";
+import { formatRelativeTime, formatSchedule } from "@/lib/utils";
 
 interface SchedulerPanelProps {
   syncs: Sync[];
@@ -73,7 +73,7 @@ export function SchedulerPanel({ syncs }: SchedulerPanelProps) {
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{sync.name}</p>
                     <p className="truncate text-xs text-muted-foreground">
-                      {sync.schedule} &middot; next run{" "}
+                      {formatSchedule(sync)} &middot; next run{" "}
                       {formatRelativeTime(sync.next_run)}
                     </p>
                   </div>

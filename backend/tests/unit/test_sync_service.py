@@ -16,6 +16,7 @@ import pytest
 
 from app.core.exceptions import NotFoundError, ValidationError
 from app.features.syncs.models import (
+    IntervalUnit,
     Sync,
     SyncRun,
     SyncRunStatus,
@@ -33,7 +34,10 @@ def make_sync(**overrides) -> Sync:
     sync.source_id = overrides.get("source_id", 1)
     sync.destination_id = overrides.get("destination_id", 1)
     sync.mapping_id = overrides.get("mapping_id", 1)
-    sync.schedule = overrides.get("schedule", "*/30 * * * *")
+    sync.interval_value = overrides.get("interval_value", 1)
+    sync.interval_unit = overrides.get("interval_unit", IntervalUnit.HOURS)
+    sync.run_at_time = overrides.get("run_at_time", None)
+    sync.next_run = overrides.get("next_run", None)
     sync.incremental_field = overrides.get("incremental_field", None)
     sync.status = overrides.get("status", SyncStatus.ACTIVE)
     # MagicMock(spec=Sync) still auto-generates these relationship attrs as
@@ -85,7 +89,8 @@ class TestCreate:
             source_id=1,
             destination_id=1,
             mapping_id=1,
-            schedule="0 * * * *",
+            interval_value=1,
+            interval_unit="hours",
         )
 
         await service.create(data)
@@ -99,15 +104,23 @@ class TestCreate:
 
 class TestUpdate:
     @pytest.mark.asyncio
-    async def test_recalculates_next_run_when_schedule_changes(self, service, repos):
+    async def test_recalculates_next_run_when_interval_changes(self, service, repos):
         sync_repo, *_ = repos
 
-        await service.update(1, SyncUpdate(schedule="0 0 * * *"))
+        await service.update(1, SyncUpdate(interval_value=6, interval_unit="hours"))
 
         sync_repo.update_next_run.assert_awaited_once()
         call_id, call_next_run = sync_repo.update_next_run.call_args.args
         assert call_id == 1
         assert isinstance(call_next_run, datetime)
+
+    @pytest.mark.asyncio
+    async def test_recalculates_next_run_when_run_at_time_changes(self, service, repos):
+        sync_repo, *_ = repos
+
+        await service.update(1, SyncUpdate(run_at_time="14:30"))
+
+        sync_repo.update_next_run.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_does_not_touch_next_run_for_unrelated_field_changes(
@@ -119,10 +132,20 @@ class TestUpdate:
 
         sync_repo.update_next_run.assert_not_awaited()
 
-    @pytest.mark.asyncio
-    async def test_rejects_an_invalid_schedule(self, service):
-        with pytest.raises(ValidationError):
-            await service.update(1, SyncUpdate(schedule="not a cron expression"))
+    def test_rejects_a_malformed_run_at_time_at_the_schema_level(self):
+        with pytest.raises(ValueError, match="HH:MM"):
+            SyncUpdate(run_at_time="not a time")
+
+    def test_rejects_an_out_of_range_interval_value_at_the_schema_level(self):
+        with pytest.raises(ValueError):
+            SyncCreate(
+                name="x",
+                source_id=1,
+                destination_id=1,
+                mapping_id=1,
+                interval_value=0,
+                interval_unit="hours",
+            )
 
 
 class TestRunNow:

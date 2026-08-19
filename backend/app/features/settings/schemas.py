@@ -15,6 +15,10 @@ class AppSettingsUpdate(BaseModel):
     llm_base_url: str | None = Field(None, min_length=1, max_length=500)
     llm_model: str | None = Field(None, min_length=1, max_length=255)
 
+    telegram_enabled: bool | None = None
+    telegram_bot_token: str | None = Field(None, max_length=255)
+    telegram_chat_id: str | None = Field(None, max_length=255)
+
     default_connect_timeout_seconds: float | None = Field(None, gt=0, le=300)
     default_request_timeout_seconds: float | None = Field(None, gt=0, le=300)
 
@@ -29,6 +33,10 @@ class AppSettingsRead(BaseModel):
     llm_base_url: str
     llm_model: str
 
+    telegram_enabled: bool
+    telegram_bot_token: str
+    telegram_chat_id: str
+
     default_connect_timeout_seconds: float
     default_request_timeout_seconds: float
 
@@ -42,4 +50,11 @@ class LLMStatus(BaseModel):
 
     model_present: bool
     pulling: bool
+    detail: str | None = None
+
+
+class TelegramTestResult(BaseModel):
+    """Result of sending a test message via the Settings page."""
+
+    success: bool
     detail: str | None = None

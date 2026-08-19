@@ -1,10 +1,19 @@
 import { api, buildQuery } from "@/api/client";
-import type { ListParams, ListResponse, Sync, SyncInput, SyncRun } from "@/api/types";
+import type {
+  ListParams,
+  ListResponse,
+  Sync,
+  SyncInput,
+  SyncRun,
+  UpcomingSyncRuns,
+} from "@/api/types";
 
 export const syncsApi = {
   list: (params: ListParams & { status?: string } = {}) =>
     api.get<ListResponse<Sync>>(`/syncs/${buildQuery(params)}`),
   get: (id: number) => api.get<Sync>(`/syncs/${id}`),
+  upcoming: (days = 7) =>
+    api.get<UpcomingSyncRuns[]>(`/syncs/upcoming${buildQuery({ days })}`),
   create: (input: SyncInput) => api.post<Sync>("/syncs/", input),
   update: (id: number, input: Partial<SyncInput>) => api.put<Sync>(`/syncs/${id}`, input),
   remove: (id: number) => api.delete<void>(`/syncs/${id}`),

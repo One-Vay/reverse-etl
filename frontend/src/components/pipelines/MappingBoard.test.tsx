@@ -37,6 +37,23 @@ const mockedGetTableSchema = vi.mocked(sourcesApi.getTableSchema);
 const mockedGetEntityFields = vi.mocked(destinationsApi.getEntityFields);
 const mockedGetSettings = vi.mocked(settingsApi.get);
 
+function makeSettings(overrides: Partial<Awaited<ReturnType<typeof settingsApi.get>>> = {}) {
+  return {
+    scheduler_enabled: true,
+    scheduler_poll_interval_seconds: 30,
+    llm_enabled: false,
+    llm_base_url: "http://ollama:11434",
+    llm_model: "qwen2.5:0.5b",
+    telegram_enabled: false,
+    telegram_bot_token: "",
+    telegram_chat_id: "",
+    default_connect_timeout_seconds: 10,
+    default_request_timeout_seconds: 30,
+    updated_at: new Date().toISOString(),
+    ...overrides,
+  };
+}
+
 const SOURCE_COLUMNS = [
   { name: "id", data_type: "integer", nullable: false, is_primary_key: true },
   { name: "email", data_type: "text", nullable: false, is_primary_key: false },
@@ -64,16 +81,7 @@ describe("MappingBoard", () => {
   beforeEach(() => {
     mockedGetTableSchema.mockReset().mockResolvedValue(SOURCE_COLUMNS);
     mockedGetEntityFields.mockReset().mockResolvedValue(DESTINATION_FIELDS);
-    mockedGetSettings.mockReset().mockResolvedValue({
-      scheduler_enabled: true,
-      scheduler_poll_interval_seconds: 30,
-      llm_enabled: false,
-      llm_base_url: "http://ollama:11434",
-      llm_model: "qwen2.5:0.5b",
-      default_connect_timeout_seconds: 10,
-      default_request_timeout_seconds: 30,
-      updated_at: new Date().toISOString(),
-    });
+    mockedGetSettings.mockReset().mockResolvedValue(makeSettings());
   });
 
   const baseProps = {
@@ -219,16 +227,7 @@ describe("MappingBoard", () => {
     });
 
     it("applies suggested pairs above the confidence threshold", async () => {
-      mockedGetSettings.mockResolvedValue({
-        scheduler_enabled: true,
-        scheduler_poll_interval_seconds: 30,
-        llm_enabled: true,
-        llm_base_url: "http://ollama:11434",
-        llm_model: "qwen2.5:0.5b",
-        default_connect_timeout_seconds: 10,
-        default_request_timeout_seconds: 30,
-        updated_at: new Date().toISOString(),
-      });
+      mockedGetSettings.mockResolvedValue(makeSettings({ llm_enabled: true }));
       const { mappingsApi } = await import("@/api/mappings");
       vi.mocked(mappingsApi.suggest).mockResolvedValue({
         pairs: [
@@ -249,6 +248,32 @@ describe("MappingBoard", () => {
         expect(onConnect).toHaveBeenCalledWith("email", "EMAIL");
       });
       expect(onConnect).not.toHaveBeenCalledWith("id", "ID");
+      expect(await screen.findByText(/applied 1 ai suggestion/i)).toBeInTheDocument();
+    });
+
+    it("shows an info toast when every suggestion is already mapped", async () => {
+      mockedGetSettings.mockResolvedValue(makeSettings({ llm_enabled: true }));
+      const { mappingsApi } = await import("@/api/mappings");
+      vi.mocked(mappingsApi.suggest).mockResolvedValue({
+        pairs: [{ source_field: "email", destination_field: "EMAIL", confidence: 0.9 }],
+        message: null,
+      });
+      const onConnect = vi.fn();
+      const user = userEvent.setup();
+      renderWithClient(
+        <MappingBoard
+          {...baseProps}
+          fieldMappings={[{ source_field: "email", destination_field: "EMAIL" }]}
+          onConnect={onConnect}
+        />,
+      );
+
+      const button = await screen.findByRole("button", { name: /suggest with ai/i });
+      await waitFor(() => expect(button).not.toBeDisabled());
+      await user.click(button);
+
+      expect(await screen.findByText(/nothing new to suggest/i)).toBeInTheDocument();
+      expect(onConnect).not.toHaveBeenCalled();
     });
   });
 });

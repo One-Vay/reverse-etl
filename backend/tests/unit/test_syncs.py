@@ -5,24 +5,17 @@ from app.features.syncs.schemas import SyncRead, SyncListResponse, SyncRunRead
 from app.core.exceptions import ValidationError, NotFoundError
 
 
-@pytest.mark.asyncio
-async def test_create_sync(client: AsyncClient, sync_service):
-    payload = {
-        "name": "New Sync",
-        "source_id": 1,
-        "destination_id": 1,
-        "mapping_id": 1,
-        "schedule": "*/30 * * * *",
-        "status": "active",
-    }
+def make_sync_read(**overrides) -> SyncRead:
     now = datetime.now()
-    expected = SyncRead(
+    defaults = dict(
         id=1,
-        name="New Sync",
+        name="Test",
         source_id=1,
         destination_id=1,
         mapping_id=1,
-        schedule="*/30 * * * *",
+        interval_value=1,
+        interval_unit="hours",
+        run_at_time=None,
         incremental_field=None,
         last_run=None,
         next_run=None,
@@ -30,7 +23,22 @@ async def test_create_sync(client: AsyncClient, sync_service):
         created_at=now,
         updated_at=now,
     )
-    sync_service.create.return_value = expected
+    defaults.update(overrides)
+    return SyncRead(**defaults)
+
+
+@pytest.mark.asyncio
+async def test_create_sync(client: AsyncClient, sync_service):
+    payload = {
+        "name": "New Sync",
+        "source_id": 1,
+        "destination_id": 1,
+        "mapping_id": 1,
+        "interval_value": 6,
+        "interval_unit": "hours",
+        "status": "active",
+    }
+    sync_service.create.return_value = make_sync_read(name="New Sync")
 
     response = await client.post("/api/v1/syncs/", json=payload)
     assert response.status_code == 201
@@ -40,14 +48,34 @@ async def test_create_sync(client: AsyncClient, sync_service):
 
 
 @pytest.mark.asyncio
-async def test_create_sync_invalid_schedule(client: AsyncClient, sync_service):
-    sync_service.create.side_effect = ValidationError("Invalid schedule")
+async def test_create_sync_rejects_interval_value_out_of_range(
+    client: AsyncClient, sync_service
+):
     payload = {
         "name": "Invalid",
         "source_id": 1,
         "destination_id": 1,
         "mapping_id": 1,
-        "schedule": "invalid",
+        "interval_value": 0,
+        "interval_unit": "hours",
+        "status": "active",
+    }
+    response = await client.post("/api/v1/syncs/", json=payload)
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_create_sync_rejects_malformed_run_at_time(
+    client: AsyncClient, sync_service
+):
+    payload = {
+        "name": "Invalid",
+        "source_id": 1,
+        "destination_id": 1,
+        "mapping_id": 1,
+        "interval_value": 1,
+        "interval_unit": "days",
+        "run_at_time": "not-a-time",
         "status": "active",
     }
     response = await client.post("/api/v1/syncs/", json=payload)
@@ -64,7 +92,8 @@ async def test_create_sync_mapping_wrong_source(client: AsyncClient, sync_servic
         "source_id": 2,
         "destination_id": 1,
         "mapping_id": 1,
-        "schedule": "*/30 * * * *",
+        "interval_value": 1,
+        "interval_unit": "hours",
         "status": "active",
     }
     response = await client.post("/api/v1/syncs/", json=payload)
@@ -73,22 +102,7 @@ async def test_create_sync_mapping_wrong_source(client: AsyncClient, sync_servic
 
 @pytest.mark.asyncio
 async def test_get_sync(client: AsyncClient, sync_service):
-    now = datetime.now()
-    expected = SyncRead(
-        id=1,
-        name="Test",
-        source_id=1,
-        destination_id=1,
-        mapping_id=1,
-        schedule="*/30 * * * *",
-        incremental_field=None,
-        last_run=None,
-        next_run=None,
-        status="active",
-        created_at=now,
-        updated_at=now,
-    )
-    sync_service.get.return_value = expected
+    sync_service.get.return_value = make_sync_read()
 
     response = await client.get("/api/v1/syncs/1")
     assert response.status_code == 200
@@ -96,29 +110,9 @@ async def test_get_sync(client: AsyncClient, sync_service):
 
 @pytest.mark.asyncio
 async def test_list_syncs(client: AsyncClient, sync_service):
-    now = datetime.now()
-    expected = SyncListResponse(
-        items=[
-            SyncRead(
-                id=1,
-                name="Test",
-                source_id=1,
-                destination_id=1,
-                mapping_id=1,
-                schedule="*/30 * * * *",
-                incremental_field=None,
-                last_run=None,
-                next_run=None,
-                status="active",
-                created_at=now,
-                updated_at=now,
-            )
-        ],
-        total=1,
-        skip=0,
-        limit=100,
+    sync_service.get_list.return_value = SyncListResponse(
+        items=[make_sync_read()], total=1, skip=0, limit=100
     )
-    sync_service.get_list.return_value = expected
 
     response = await client.get("/api/v1/syncs/")
     assert response.status_code == 200
@@ -126,25 +120,27 @@ async def test_list_syncs(client: AsyncClient, sync_service):
 
 @pytest.mark.asyncio
 async def test_update_sync(client: AsyncClient, sync_service):
-    now = datetime.now()
-    expected = SyncRead(
-        id=1,
-        name="Updated",
-        source_id=1,
-        destination_id=1,
-        mapping_id=1,
-        schedule="*/30 * * * *",
-        incremental_field=None,
-        last_run=None,
-        next_run=None,
-        status="active",
-        created_at=now,
-        updated_at=now,
-    )
-    sync_service.update.return_value = expected
+    sync_service.update.return_value = make_sync_read(name="Updated")
 
     response = await client.put("/api/v1/syncs/1", json={"name": "Updated"})
     assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_update_sync_interval(client: AsyncClient, sync_service):
+    sync_service.update.return_value = make_sync_read(
+        interval_value=2, interval_unit="days", run_at_time="14:30"
+    )
+
+    response = await client.put(
+        "/api/v1/syncs/1",
+        json={"interval_value": 2, "interval_unit": "days", "run_at_time": "14:30"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["interval_unit"] == "days"
+    assert data["run_at_time"] == "14:30"
 
 
 @pytest.mark.asyncio
@@ -222,6 +218,23 @@ async def test_list_all_sync_runs(client: AsyncClient, sync_service):
 
     assert response.status_code == 200
     sync_service.get_all_runs.assert_called_once_with(skip=0, limit=100)
+
+
+@pytest.mark.asyncio
+async def test_list_upcoming_sync_runs(client: AsyncClient, sync_service):
+    from app.features.syncs.schemas import UpcomingSyncRuns
+
+    now = datetime.now()
+    sync_service.get_upcoming.return_value = [
+        UpcomingSyncRuns(sync_id=1, sync_name="Test", occurrences=[now])
+    ]
+
+    response = await client.get("/api/v1/syncs/upcoming")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data[0]["sync_id"] == 1
+    sync_service.get_upcoming.assert_called_once_with(days=7)
 
 
 @pytest.mark.asyncio

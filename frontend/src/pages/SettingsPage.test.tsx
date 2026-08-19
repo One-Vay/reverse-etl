@@ -15,6 +15,7 @@ vi.mock("@/api/settings", () => ({
     update: vi.fn(),
     getLLMStatus: vi.fn(),
     pullLLMModel: vi.fn(),
+    sendTelegramTestMessage: vi.fn(),
   },
 }));
 
@@ -23,6 +24,7 @@ import { settingsApi } from "@/api/settings";
 const mockedGet = vi.mocked(settingsApi.get);
 const mockedUpdate = vi.mocked(settingsApi.update);
 const mockedGetLLMStatus = vi.mocked(settingsApi.getLLMStatus);
+const mockedSendTelegramTest = vi.mocked(settingsApi.sendTelegramTestMessage);
 
 const BASE_SETTINGS = {
   scheduler_enabled: true,
@@ -30,6 +32,9 @@ const BASE_SETTINGS = {
   llm_enabled: false,
   llm_base_url: "http://ollama:11434",
   llm_model: "qwen2.5:0.5b",
+  telegram_enabled: false,
+  telegram_bot_token: "",
+  telegram_chat_id: "",
   default_connect_timeout_seconds: 10,
   default_request_timeout_seconds: 30,
   updated_at: new Date().toISOString(),
@@ -58,6 +63,10 @@ describe("SettingsPage", () => {
       model_present: false,
       pulling: false,
       detail: null,
+    });
+    mockedSendTelegramTest.mockReset().mockResolvedValue({
+      success: true,
+      detail: "Test message sent.",
     });
   });
 
@@ -98,5 +107,32 @@ describe("SettingsPage", () => {
     await user.click(screen.getByLabelText(/ai mapping suggestions enabled/i));
 
     expect(screen.getByLabelText(/ollama base url/i)).toBeEnabled();
+  });
+
+  it("enables the Telegram fields and a test-message button when the switch is on", async () => {
+    const user = userEvent.setup();
+    renderPage(<SettingsPage />);
+
+    await screen.findByLabelText(/poll interval/i);
+    await user.click(screen.getByLabelText(/telegram notifications enabled/i));
+
+    expect(screen.getByLabelText(/bot token/i)).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: /send test message/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("sends a Telegram test message and reports success", async () => {
+    const user = userEvent.setup();
+    renderPage(<SettingsPage />);
+
+    await screen.findByLabelText(/poll interval/i);
+    await user.click(screen.getByLabelText(/telegram notifications enabled/i));
+    await user.click(screen.getByRole("button", { name: /send test message/i }));
+
+    await waitFor(() => {
+      expect(mockedSendTelegramTest).toHaveBeenCalled();
+    });
+    expect(await screen.findByText("Test message sent")).toBeInTheDocument();
   });
 });

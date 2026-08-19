@@ -84,9 +84,25 @@ async def execute(
     )
 
     await sync_repo.update_last_run(sync.id, finished_at)
-    next_run = calculate_next_run(sync.schedule)
-    if next_run:
-        await sync_repo.update_next_run(sync.id, next_run)
+    # Anchored to the sync's own previous next_run (not `finished_at`/`now`)
+    # so a late run doesn't push every future occurrence later too — the
+    # cadence tracks the original schedule, not when runs actually happen.
+    # If the sync was overdue by more than one interval (e.g. the
+    # container was down for a while), step forward until the result is
+    # actually in the future instead of landing on another already-past
+    # time — otherwise the very next scheduler tick would see it as due
+    # again and fire a burst of catch-up runs instead of just the one.
+    next_run = calculate_next_run(
+        sync.interval_value,
+        sync.interval_unit,
+        sync.run_at_time,
+        anchor=sync.next_run or finished_at,
+    )
+    while next_run <= finished_at:
+        next_run = calculate_next_run(
+            sync.interval_value, sync.interval_unit, sync.run_at_time, anchor=next_run
+        )
+    await sync_repo.update_next_run(sync.id, next_run)
 
     return run
 

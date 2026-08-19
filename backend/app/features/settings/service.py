@@ -5,9 +5,14 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from app.core import llm
+from app.core import llm, telegram
 from app.features.settings.repository import SettingsRepository
-from app.features.settings.schemas import AppSettingsRead, AppSettingsUpdate, LLMStatus
+from app.features.settings.schemas import (
+    AppSettingsRead,
+    AppSettingsUpdate,
+    LLMStatus,
+    TelegramTestResult,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +54,31 @@ class SettingsService:
             settings.llm_model, base_url=settings.llm_base_url
         )
         return LLMStatus(model_present=present, pulling=False)
+
+    async def send_telegram_test_message(self) -> TelegramTestResult:
+        """Send a short confirmation message to the configured chat — lets
+        a user verify their bot token/chat ID entirely from the Settings
+        page, without ever pasting a token anywhere but their own running
+        instance."""
+        settings = await self.repository.get()
+        if not settings.telegram_enabled:
+            return TelegramTestResult(
+                success=False, detail="Enable Telegram notifications first."
+            )
+        if not settings.telegram_bot_token or not settings.telegram_chat_id:
+            return TelegramTestResult(
+                success=False, detail="Bot token and chat ID are both required."
+            )
+
+        try:
+            await telegram.send_message(
+                settings.telegram_bot_token,
+                settings.telegram_chat_id,
+                "✅ Reverse ETL: test message. Your Telegram notifications are set up correctly.",
+            )
+        except telegram.TelegramError as exc:
+            return TelegramTestResult(success=False, detail=str(exc))
+        return TelegramTestResult(success=True, detail="Test message sent.")
 
     def trigger_model_pull(self, base_url: str, model: str) -> None:
         """Kick off a model pull in the background — never awaited by the

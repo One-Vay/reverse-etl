@@ -46,6 +46,16 @@ class AppSettings(Base, TimestampMixin):
         String(255), nullable=False, default="qwen2.5:0.5b"
     )
 
+    telegram_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    telegram_bot_token: Mapped[str] = mapped_column(
+        String(255), nullable=False, default=""
+    )
+    telegram_chat_id: Mapped[str] = mapped_column(
+        String(255), nullable=False, default=""
+    )
+
     default_connect_timeout_seconds: Mapped[float] = mapped_column(
         Float, nullable=False, default=10.0
     )

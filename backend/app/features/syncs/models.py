@@ -6,7 +6,7 @@ import enum
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, String
+from sqlalchemy import DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base, TimestampMixin
@@ -23,6 +23,15 @@ class SyncStatus(str, enum.Enum):
     ACTIVE = "active"
     PAUSED = "paused"
     INACTIVE = "inactive"
+
+
+class IntervalUnit(str, enum.Enum):
+    """Granularity of a sync's schedule — deliberately just these two so
+    the frequency picker in the UI stays a plain "every N hours/days"
+    instead of exposing cron syntax."""
+
+    HOURS = "hours"
+    DAYS = "days"
 
 
 class SyncRunStatus(str, enum.Enum):
@@ -68,7 +77,14 @@ class Sync(Base, TimestampMixin):
         index=True,
     )
 
-    schedule: Mapped[str] = mapped_column(String(100), nullable=False)
+    interval_value: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    interval_unit: Mapped[IntervalUnit] = mapped_column(
+        String(10), nullable=False, default=IntervalUnit.HOURS
+    )
+    # "HH:MM", 24h. Only meaningful when interval_unit is DAYS — ignored
+    # for HOURS, where a sync just fires every N hours from whenever it
+    # was last scheduled.
+    run_at_time: Mapped[str | None] = mapped_column(String(5), nullable=True)
     incremental_field: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     last_run: Mapped[datetime | None] = mapped_column(

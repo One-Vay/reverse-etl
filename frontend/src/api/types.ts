@@ -80,13 +80,17 @@ export interface MappingInput {
   field_mappings: FieldMapping[];
 }
 
+export type IntervalUnit = "hours" | "days";
+
 export interface Sync {
   id: number;
   name: string;
   source_id: number;
   destination_id: number;
   mapping_id: number;
-  schedule: string;
+  interval_value: number;
+  interval_unit: IntervalUnit;
+  run_at_time: string | null;
   incremental_field: string | null;
   last_run: string | null;
   next_run: string | null;
@@ -103,9 +107,17 @@ export interface SyncInput {
   source_id: number;
   destination_id: number;
   mapping_id: number;
-  schedule: string;
+  interval_value: number;
+  interval_unit: IntervalUnit;
+  run_at_time?: string | null;
   incremental_field?: string | null;
   status?: SyncStatus;
+}
+
+export interface UpcomingSyncRuns {
+  sync_id: number;
+  sync_name: string;
+  occurrences: string[];
 }
 
 export type SyncRunStatus = "running" | "success" | "failed";
@@ -130,6 +142,9 @@ export interface AppSettings {
   llm_enabled: boolean;
   llm_base_url: string;
   llm_model: string;
+  telegram_enabled: boolean;
+  telegram_bot_token: string;
+  telegram_chat_id: string;
   default_connect_timeout_seconds: number;
   default_request_timeout_seconds: number;
   updated_at: string;
@@ -140,6 +155,11 @@ export type AppSettingsInput = Partial<Omit<AppSettings, "updated_at">>;
 export interface LLMStatus {
   model_present: boolean;
   pulling: boolean;
+  detail: string | null;
+}
+
+export interface TelegramTestResult {
+  success: boolean;
   detail: string | null;
 }
 

@@ -64,3 +64,28 @@ export function usePullLLMModel() {
     },
   });
 }
+
+/** Sends a test message to the configured Telegram chat. Result is
+ * `{success, detail}` even on a rejected token/chat ID (not thrown), so
+ * this always shows a toast reflecting the actual outcome. */
+export function useSendTelegramTestMessage() {
+  const { showToast } = useToast();
+
+  return useMutation({
+    mutationFn: () => settingsApi.sendTelegramTestMessage(),
+    onSuccess: (result) => {
+      showToast({
+        variant: result.success ? "success" : "error",
+        title: result.success ? "Test message sent" : "Couldn't send test message",
+        description: result.detail ?? undefined,
+      });
+    },
+    onError: (error) => {
+      showToast({
+        variant: "error",
+        title: "Couldn't send test message",
+        description: getErrorMessage(error),
+      });
+    },
+  });
+}

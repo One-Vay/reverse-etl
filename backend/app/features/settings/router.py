@@ -5,7 +5,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.features.settings.repository import SettingsRepository
-from app.features.settings.schemas import AppSettingsRead, AppSettingsUpdate, LLMStatus
+from app.features.settings.schemas import (
+    AppSettingsRead,
+    AppSettingsUpdate,
+    LLMStatus,
+    TelegramTestResult,
+)
 from app.features.settings.service import SettingsService
 
 router = APIRouter(prefix="/settings", tags=["settings"])
@@ -44,3 +49,12 @@ async def pull_llm_model(service: SettingsService = Depends(get_settings_service
     current = await service.get()
     service.trigger_model_pull(current.llm_base_url, current.llm_model)
     return {"message": f"Pulling {current.llm_model}"}
+
+
+@router.post("/telegram/test", response_model=TelegramTestResult)
+async def send_telegram_test_message(
+    service: SettingsService = Depends(get_settings_service),
+):
+    """Send a test message to the configured Telegram chat — how a user
+    verifies their bot token/chat ID entirely from the UI."""
+    return await service.send_telegram_test_message()

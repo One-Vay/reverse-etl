@@ -51,15 +51,33 @@ export const mappingSchema = z.object({
 });
 export type MappingFormValues = z.infer<typeof mappingSchema>;
 
-export const syncSchema = z.object({
-  name: z.string().min(1, "Name is required").max(255),
-  source_id: z.coerce.number().int().min(1, "Select a source"),
-  destination_id: z.coerce.number().int().min(1, "Select a destination"),
-  mapping_id: z.coerce.number().int().min(1, "Select a mapping"),
-  schedule: z.string().min(1, "Schedule is required"),
-  incremental_field: z.string().optional(),
-  status: z.enum(["active", "paused", "inactive"]).default("active"),
-});
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+export const syncSchema = z
+  .object({
+    name: z.string().min(1, "Name is required").max(255),
+    source_id: z.coerce.number().int().min(1, "Select a source"),
+    destination_id: z.coerce.number().int().min(1, "Select a destination"),
+    mapping_id: z.coerce.number().int().min(1, "Select a mapping"),
+    interval_value: z.coerce.number().int().min(1, "Must be at least 1"),
+    interval_unit: z.enum(["hours", "days"]),
+    run_at_time: z
+      .union([z.literal(""), z.string().regex(TIME_RE, "Use HH:MM (24h)")])
+      .optional()
+      .transform((v) => (v === "" || v === undefined ? null : v)),
+    incremental_field: z.string().optional(),
+    status: z.enum(["active", "paused", "inactive"]).default("active"),
+  })
+  .refine(
+    (data) =>
+      data.interval_unit === "hours"
+        ? data.interval_value <= 168
+        : data.interval_value <= 90,
+    {
+      message: "At most 168 hours or 90 days",
+      path: ["interval_value"],
+    },
+  );
 export type SyncFormValues = z.infer<typeof syncSchema>;
 
 export const settingsSchema = z.object({
@@ -68,6 +86,9 @@ export const settingsSchema = z.object({
   llm_enabled: z.boolean(),
   llm_base_url: z.string().min(1, "Ollama URL is required"),
   llm_model: z.string().min(1, "Model name is required"),
+  telegram_enabled: z.boolean(),
+  telegram_bot_token: z.string().optional(),
+  telegram_chat_id: z.string().optional(),
   default_connect_timeout_seconds: z.coerce.number().positive().max(300),
   default_request_timeout_seconds: z.coerce.number().positive().max(300),
 });

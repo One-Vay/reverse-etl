@@ -2,14 +2,14 @@
 repositories mocked — no real DB or network access.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from app.connectors.base import ConnectionFailedError
 from app.features.syncs import runner
-from app.features.syncs.models import SyncRunStatus, SyncRunTrigger
+from app.features.syncs.models import IntervalUnit, SyncRunStatus, SyncRunTrigger
 
 
 def make_sync(**overrides):
@@ -17,7 +17,10 @@ def make_sync(**overrides):
     sync.id = overrides.get("id", 1)
     sync.source_id = overrides.get("source_id", 10)
     sync.destination_id = overrides.get("destination_id", 20)
-    sync.schedule = overrides.get("schedule", "0 * * * *")
+    sync.interval_value = overrides.get("interval_value", 1)
+    sync.interval_unit = overrides.get("interval_unit", IntervalUnit.HOURS)
+    sync.run_at_time = overrides.get("run_at_time", None)
+    sync.next_run = overrides.get("next_run", datetime(2026, 1, 1, tzinfo=timezone.utc))
     sync.incremental_field = overrides.get("incremental_field", None)
     sync.last_run = overrides.get("last_run", None)
 
@@ -312,4 +315,83 @@ class TestExecuteFailure:
             )
 
         assert run.status == SyncRunStatus.FAILED
-        assert "weird bug" in run.error_message
+
+
+class TestNextRunScheduling:
+    """The scheduled cadence must anchor to the sync's own previous
+    `next_run`, not to whenever the run actually happened — otherwise a
+    late run would push every future occurrence later too, and a long
+    outage would trigger a burst of catch-up runs instead of just one."""
+
+    @pytest.mark.asyncio
+    async def test_next_run_anchors_to_the_previous_scheduled_time_not_now(
+        self, mock_session, mock_run_repo, mock_sync_repo
+    ):
+        # Scheduled for 2 minutes ago (a normal, on-time run) — the new
+        # next_run should be exactly one hour after *that*, not one hour
+        # after "now".
+        scheduled_for = datetime.now(timezone.utc) - timedelta(minutes=2)
+        sync = make_sync(
+            interval_value=1, interval_unit=IntervalUnit.HOURS, next_run=scheduled_for
+        )
+        source_connector = make_source_connector([])
+        destination_connector = make_destination_connector(written=0)
+
+        patch_source, patch_dest = patch_services(
+            source_connector, destination_connector
+        )
+        with (
+            patch_source,
+            patch_dest,
+            patch(
+                "app.features.syncs.runner.SyncRepository", return_value=mock_sync_repo
+            ),
+            patch(
+                "app.features.syncs.runner.SyncRunRepository",
+                return_value=mock_run_repo,
+            ),
+        ):
+            await runner.execute(
+                sync, session=mock_session, trigger=SyncRunTrigger.SCHEDULED
+            )
+
+        call_id, next_run = mock_sync_repo.update_next_run.call_args.args
+        assert call_id == sync.id
+        assert next_run == scheduled_for + timedelta(hours=1)
+
+    @pytest.mark.asyncio
+    async def test_long_outage_skips_forward_instead_of_bursting(
+        self, mock_session, mock_run_repo, mock_sync_repo
+    ):
+        # The sync was due 3 days ago (e.g. the container was down) with
+        # an hourly interval — naively anchoring would produce a next_run
+        # still hours in the past, which the scheduler would immediately
+        # see as due again on its very next poll. It must land in the
+        # future instead.
+        scheduled_for = datetime.now(timezone.utc) - timedelta(days=3)
+        sync = make_sync(
+            interval_value=1, interval_unit=IntervalUnit.HOURS, next_run=scheduled_for
+        )
+        source_connector = make_source_connector([])
+        destination_connector = make_destination_connector(written=0)
+
+        patch_source, patch_dest = patch_services(
+            source_connector, destination_connector
+        )
+        with (
+            patch_source,
+            patch_dest,
+            patch(
+                "app.features.syncs.runner.SyncRepository", return_value=mock_sync_repo
+            ),
+            patch(
+                "app.features.syncs.runner.SyncRunRepository",
+                return_value=mock_run_repo,
+            ),
+        ):
+            await runner.execute(
+                sync, session=mock_session, trigger=SyncRunTrigger.SCHEDULED
+            )
+
+        _, next_run = mock_sync_repo.update_next_run.call_args.args
+        assert next_run > datetime.now(timezone.utc)

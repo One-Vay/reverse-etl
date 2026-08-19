@@ -47,6 +47,42 @@ frontend/   React + TypeScript + Vite application
    uvicorn app.main:app --reload
    ```
 
+## Getting started (full stack, Docker Compose)
+
+`docker compose up -d --build` starts `db`, `backend`, and `frontend`. The
+optional local-LLM service (`ollama`, used for AI mapping suggestions) is
+gated behind a Compose profile and is **not** started by the plain command
+above — opt in explicitly:
+
+```bash
+docker compose --profile llm up -d
+```
+
+Then enable "AI mapping suggestions" in the console's Settings page.
+
+### Database migrations against the Docker stack
+
+If you're running via Docker Compose, don't run Alembic against
+`localhost:5432` from the host — on a machine that also has a native
+Postgres install, both can end up listening on the same port and Windows/OS
+port-forwarding may route your connection to the wrong database. Run Alembic
+*inside* the Docker network instead:
+
+```bash
+# Generate a migration (note: --name, not --rm, so the container survives
+# long enough to copy the generated file out):
+docker compose run --name migration-gen --entrypoint alembic backend \
+  revision --autogenerate -m "describe the change"
+docker cp migration-gen:/app/alembic/versions/<generated_file>.py backend/alembic/versions/
+docker rm migration-gen
+
+# Review the generated migration (autogenerate doesn't always get NOT NULL
+# defaults on existing rows right — add server_default= where needed), then
+# rebuild the image so it's included, and apply:
+docker compose build backend
+docker compose run --rm --entrypoint alembic backend upgrade head
+```
+
 ## Workflow
 
 We follow [GitHub Flow](https://docs.github.com/en/get-started/using-github/github-flow):

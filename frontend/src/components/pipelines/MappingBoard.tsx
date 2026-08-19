@@ -6,6 +6,7 @@ import { useSuggestMappings } from "@/hooks/useMappings";
 import { useSettings } from "@/hooks/useSettings";
 import { useSourceTableSchema } from "@/hooks/useSources";
 import { Button } from "@/components/ui/Button";
+import { useToast } from "@/context/ToastContext";
 import { cn } from "@/lib/utils";
 
 // Suggested pairs below this confidence are dropped rather than
@@ -58,6 +59,7 @@ export function MappingBoard({
   const fieldsQuery = useDestinationEntityFields(destinationId, entity);
   const settingsQuery = useSettings();
   const suggestMappings = useSuggestMappings();
+  const { showToast } = useToast();
 
   if (!sourceId || !table || !destinationId || !entity) return null;
 
@@ -130,10 +132,28 @@ export function MappingBoard({
       sourceColumns: columns.map((c) => ({ name: c.name, data_type: c.data_type })),
       destinationFields: fields.map((f) => ({ name: f.name, data_type: f.data_type })),
     });
+    // A suggestion only counts as "new" if it changes an actual connection —
+    // otherwise a click that re-suggests already-mapped fields would look
+    // like nothing happened, with no visible change and no feedback.
+    let appliedCount = 0;
     for (const pair of result.pairs) {
-      if (pair.confidence >= SUGGESTION_CONFIDENCE_THRESHOLD) {
-        onConnect(pair.source_field, pair.destination_field);
-      }
+      if (pair.confidence < SUGGESTION_CONFIDENCE_THRESHOLD) continue;
+      if (sourceByField.get(pair.source_field) === pair.destination_field) continue;
+      onConnect(pair.source_field, pair.destination_field);
+      appliedCount += 1;
+    }
+
+    if (appliedCount > 0) {
+      showToast({
+        variant: "success",
+        title: `Applied ${appliedCount} AI suggestion${appliedCount === 1 ? "" : "s"}`,
+      });
+    } else if (result.pairs.length > 0) {
+      showToast({
+        variant: "info",
+        title: "Nothing new to suggest",
+        description: "These fields are already mapped.",
+      });
     }
   };
 
