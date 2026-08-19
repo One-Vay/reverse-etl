@@ -13,21 +13,44 @@ import {
   YAxis,
 } from "recharts";
 
-import type { Sync } from "@/api/types";
-import { DemoDataBadge } from "@/components/dashboard/DemoDataBadge";
+import type { Sync, SyncRun } from "@/api/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { useChartColors } from "@/lib/chartTheme";
-import { generateMockDailyStats } from "@/lib/mockRunHistory";
 
 interface StatsChartsProps {
   syncs: Sync[];
+  runs: SyncRun[];
 }
 
 const TOOLTIP_WRAPPER_STYLE = { outline: "none" };
+const DAYS_SHOWN = 14;
 
-export function StatsCharts({ syncs }: StatsChartsProps) {
+function dayKey(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+}
+
+/** Buckets recent runs into one success/failed count per day, for the last
+ * `DAYS_SHOWN` days — including days with zero runs, so the chart's x-axis
+ * stays a continuous timeline rather than skipping quiet days. */
+function bucketRunsByDay(runs: SyncRun[]): { date: string; success: number; failed: number }[] {
+  const buckets = new Map<string, { success: number; failed: number }>();
+  for (let i = DAYS_SHOWN - 1; i >= 0; i--) {
+    const date = new Date();
+    date.setDate(date.getDate() - i);
+    buckets.set(dayKey(date.toISOString()), { success: 0, failed: 0 });
+  }
+  for (const run of runs) {
+    const bucket = buckets.get(dayKey(run.started_at));
+    if (!bucket) continue; // outside the shown window
+    if (run.status === "success") bucket.success += 1;
+    else if (run.status === "failed") bucket.failed += 1;
+  }
+  return [...buckets.entries()].map(([date, counts]) => ({ date, ...counts }));
+}
+
+export function StatsCharts({ syncs, runs }: StatsChartsProps) {
   const colors = useChartColors();
-  const dailyStats = useMemo(() => generateMockDailyStats(14), []);
+  const dailyStats = useMemo(() => bucketRunsByDay(runs), [runs]);
 
   const statusDistribution = useMemo(() => {
     const counts = { active: 0, paused: 0, inactive: 0 };
@@ -49,11 +72,8 @@ export function StatsCharts({ syncs }: StatsChartsProps) {
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
       <Card className="lg:col-span-2">
-        <CardHeader className="flex-row items-center justify-between space-y-0">
-          <div className="flex items-center gap-2">
-            <CardTitle>Runs over the last 14 days</CardTitle>
-            <DemoDataBadge />
-          </div>
+        <CardHeader>
+          <CardTitle>Runs over the last 14 days</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="h-64 w-full">

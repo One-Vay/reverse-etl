@@ -19,6 +19,7 @@ from app.core.database import Base
 # be dropped.
 from app.features.destinations import models as destinations_models  # noqa: F401
 from app.features.mappings import models as mappings_models  # noqa: F401
+from app.features.settings import models as settings_models  # noqa: F401
 from app.features.sources import models as sources_models  # noqa: F401
 from app.features.syncs import models as syncs_models  # noqa: F401
 

@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MappingBoard } from "@/components/pipelines/MappingBoard";
+import { ToastProvider } from "@/context/ToastContext";
 
 vi.mock("@/api/sources", () => ({
   sourcesApi: {
@@ -16,12 +17,25 @@ vi.mock("@/api/destinations", () => ({
     getEntityFields: vi.fn(),
   },
 }));
+vi.mock("@/api/settings", () => ({
+  settingsApi: {
+    get: vi.fn(),
+    getLLMStatus: vi.fn(),
+  },
+}));
+vi.mock("@/api/mappings", () => ({
+  mappingsApi: {
+    suggest: vi.fn(),
+  },
+}));
 
 import { sourcesApi } from "@/api/sources";
 import { destinationsApi } from "@/api/destinations";
+import { settingsApi } from "@/api/settings";
 
 const mockedGetTableSchema = vi.mocked(sourcesApi.getTableSchema);
 const mockedGetEntityFields = vi.mocked(destinationsApi.getEntityFields);
+const mockedGetSettings = vi.mocked(settingsApi.get);
 
 const SOURCE_COLUMNS = [
   { name: "id", data_type: "integer", nullable: false, is_primary_key: true },
@@ -39,13 +53,27 @@ function renderWithClient(ui: ReactNode) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <ToastProvider>{ui}</ToastProvider>
+    </QueryClientProvider>,
+  );
 }
 
 describe("MappingBoard", () => {
   beforeEach(() => {
     mockedGetTableSchema.mockReset().mockResolvedValue(SOURCE_COLUMNS);
     mockedGetEntityFields.mockReset().mockResolvedValue(DESTINATION_FIELDS);
+    mockedGetSettings.mockReset().mockResolvedValue({
+      scheduler_enabled: true,
+      scheduler_poll_interval_seconds: 30,
+      llm_enabled: false,
+      llm_base_url: "http://ollama:11434",
+      llm_model: "qwen2.5:0.5b",
+      default_connect_timeout_seconds: 10,
+      default_request_timeout_seconds: 30,
+      updated_at: new Date().toISOString(),
+    });
   });
 
   const baseProps = {
@@ -59,7 +87,7 @@ describe("MappingBoard", () => {
   };
 
   it("renders nothing until a source table and destination entity are both chosen", () => {
-    const { container } = renderWithClient(
+    renderWithClient(
       <MappingBoard
         {...baseProps}
         table={undefined}
@@ -67,7 +95,7 @@ describe("MappingBoard", () => {
         onDisconnect={vi.fn()}
       />,
     );
-    expect(container).toBeEmptyDOMElement();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 
   it("renders the source columns and destination fields once loaded", async () => {
@@ -180,5 +208,47 @@ describe("MappingBoard", () => {
     renderWithClient(<MappingBoard {...baseProps} />);
 
     expect(await screen.findByText(/Couldn't load fields/)).toBeInTheDocument();
+  });
+
+  describe("AI suggestions", () => {
+    it("disables the suggest button when AI suggestions are off", async () => {
+      renderWithClient(<MappingBoard {...baseProps} />);
+
+      const button = await screen.findByRole("button", { name: /suggest with ai/i });
+      expect(button).toBeDisabled();
+    });
+
+    it("applies suggested pairs above the confidence threshold", async () => {
+      mockedGetSettings.mockResolvedValue({
+        scheduler_enabled: true,
+        scheduler_poll_interval_seconds: 30,
+        llm_enabled: true,
+        llm_base_url: "http://ollama:11434",
+        llm_model: "qwen2.5:0.5b",
+        default_connect_timeout_seconds: 10,
+        default_request_timeout_seconds: 30,
+        updated_at: new Date().toISOString(),
+      });
+      const { mappingsApi } = await import("@/api/mappings");
+      vi.mocked(mappingsApi.suggest).mockResolvedValue({
+        pairs: [
+          { source_field: "email", destination_field: "EMAIL", confidence: 0.9 },
+          { source_field: "id", destination_field: "ID", confidence: 0.2 },
+        ],
+        message: null,
+      });
+      const onConnect = vi.fn();
+      const user = userEvent.setup();
+      renderWithClient(<MappingBoard {...baseProps} onConnect={onConnect} />);
+
+      const button = await screen.findByRole("button", { name: /suggest with ai/i });
+      await waitFor(() => expect(button).not.toBeDisabled());
+      await user.click(button);
+
+      await waitFor(() => {
+        expect(onConnect).toHaveBeenCalledWith("email", "EMAIL");
+      });
+      expect(onConnect).not.toHaveBeenCalledWith("id", "ID");
+    });
   });
 });

@@ -3,10 +3,16 @@
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import and_, delete, or_, select, update
+from sqlalchemy import and_, delete, desc, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.features.syncs.models import Sync, SyncStatus
+from app.features.syncs.models import (
+    Sync,
+    SyncRun,
+    SyncRunStatus,
+    SyncRunTrigger,
+    SyncStatus,
+)
 from app.features.syncs.schemas import SyncCreate, SyncUpdate
 
 
@@ -109,6 +115,18 @@ class SyncRepository:
         result = await self.session.execute(stmt)
         return result.scalars().all()
 
+    async def get_due(self, now: datetime) -> Sequence[Sync]:
+        """Active syncs whose `next_run` has arrived — what the scheduler
+        picks up on each poll. A sync with `next_run is None` (e.g. an
+        unparseable schedule) is never due."""
+        stmt = select(Sync).where(
+            Sync.status == SyncStatus.ACTIVE,
+            Sync.next_run.is_not(None),
+            Sync.next_run <= now,
+        )
+        result = await self.session.execute(stmt)
+        return result.scalars().all()
+
     async def create(self, data: SyncCreate) -> Sync:
         sync = Sync(
             name=data.name,
@@ -152,3 +170,68 @@ class SyncRepository:
         result = await self.session.execute(stmt)
         await self.session.flush()
         return result.scalar_one_or_none()
+
+
+class SyncRunRepository:
+    """CRUD operations for sync runs. Rows are only ever written by
+    `app.features.syncs.runner`, never via a public create endpoint."""
+
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def create(
+        self,
+        *,
+        sync_id: int,
+        status: SyncRunStatus,
+        trigger: SyncRunTrigger,
+        started_at: datetime,
+        finished_at: datetime | None = None,
+        records_read: int = 0,
+        records_written: int = 0,
+        error_message: str | None = None,
+    ) -> SyncRun:
+        run = SyncRun(
+            sync_id=sync_id,
+            status=status,
+            trigger=trigger,
+            started_at=started_at,
+            finished_at=finished_at,
+            records_read=records_read,
+            records_written=records_written,
+            error_message=error_message,
+        )
+        self.session.add(run)
+        await self.session.flush()
+        await self.session.refresh(run, attribute_names=["sync"])
+        return run
+
+    async def get_by_sync(
+        self, sync_id: int, skip: int = 0, limit: int = 100
+    ) -> Sequence[SyncRun]:
+        stmt = (
+            select(SyncRun)
+            .where(SyncRun.sync_id == sync_id)
+            .order_by(desc(SyncRun.started_at))
+            .offset(skip)
+            .limit(limit)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalars().all()
+
+    async def count_by_sync(self, sync_id: int) -> int:
+        stmt = select(SyncRun).where(SyncRun.sync_id == sync_id)
+        result = await self.session.execute(stmt)
+        return len(result.scalars().all())
+
+    async def get_all(self, skip: int = 0, limit: int = 100) -> Sequence[SyncRun]:
+        stmt = (
+            select(SyncRun).order_by(desc(SyncRun.started_at)).offset(skip).limit(limit)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalars().all()
+
+    async def count_all(self) -> int:
+        stmt = select(SyncRun)
+        result = await self.session.execute(stmt)
+        return len(result.scalars().all())

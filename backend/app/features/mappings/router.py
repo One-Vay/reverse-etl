@@ -11,8 +11,13 @@ from app.features.mappings.schemas import (
     MappingListResponse,
     MappingRead,
     MappingUpdate,
+    SuggestMappingsRequest,
+    SuggestMappingsResponse,
 )
 from app.features.mappings.service import MappingService
+from app.features.mappings.suggest import suggest_mappings
+from app.features.settings.repository import SettingsRepository
+from app.features.settings.schemas import AppSettingsRead
 from app.features.sources.repository import SourceRepository
 
 router = APIRouter(prefix="/mappings", tags=["mappings"])
@@ -65,6 +70,23 @@ async def create_mapping(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
         )
+
+
+@router.post("/suggest", response_model=SuggestMappingsResponse)
+async def suggest_mapping_fields(
+    data: SuggestMappingsRequest,
+    session: AsyncSession = Depends(get_db),
+):
+    """AI-suggested source→destination field pairings, for the mapping
+    board's "Suggest with AI" button. Always returns 200 — an empty
+    `pairs` list with a `message` means suggestions aren't available
+    right now (disabled in Settings, or the LLM is unreachable), not an
+    error the frontend needs to handle specially."""
+    settings_row = await SettingsRepository(session).get()
+    settings = AppSettingsRead.model_validate(settings_row)
+    return await suggest_mappings(
+        data.source_columns, data.destination_fields, settings=settings
+    )
 
 
 @router.put("/{id}", response_model=MappingRead)

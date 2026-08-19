@@ -15,6 +15,10 @@ export interface Source {
   port: number;
   database: string;
   username: string;
+  connect_timeout: number | null;
+  command_timeout: number | null;
+  min_pool_size: number | null;
+  max_pool_size: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -27,6 +31,10 @@ export interface SourceInput {
   database: string;
   username: string;
   password?: string;
+  connect_timeout?: number | null;
+  command_timeout?: number | null;
+  min_pool_size?: number | null;
+  max_pool_size?: number | null;
 }
 
 export interface Destination {
@@ -34,6 +42,7 @@ export interface Destination {
   name: string;
   type: DestinationType;
   api_url: string;
+  request_timeout: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -43,6 +52,7 @@ export interface DestinationInput {
   type: DestinationType;
   api_url: string;
   auth_token?: string;
+  request_timeout?: number | null;
 }
 
 export interface FieldMapping {
@@ -96,6 +106,57 @@ export interface SyncInput {
   schedule: string;
   incremental_field?: string | null;
   status?: SyncStatus;
+}
+
+export type SyncRunStatus = "running" | "success" | "failed";
+export type SyncRunTrigger = "manual" | "scheduled";
+
+export interface SyncRun {
+  id: number;
+  sync_id: number;
+  status: SyncRunStatus;
+  trigger: SyncRunTrigger;
+  started_at: string;
+  finished_at: string | null;
+  records_read: number;
+  records_written: number;
+  error_message: string | null;
+  sync_name: string | null;
+}
+
+export interface AppSettings {
+  scheduler_enabled: boolean;
+  scheduler_poll_interval_seconds: number;
+  llm_enabled: boolean;
+  llm_base_url: string;
+  llm_model: string;
+  default_connect_timeout_seconds: number;
+  default_request_timeout_seconds: number;
+  updated_at: string;
+}
+
+export type AppSettingsInput = Partial<Omit<AppSettings, "updated_at">>;
+
+export interface LLMStatus {
+  model_present: boolean;
+  pulling: boolean;
+  detail: string | null;
+}
+
+export interface SuggestFieldInfo {
+  name: string;
+  data_type: string;
+}
+
+export interface SuggestedFieldPair {
+  source_field: string;
+  destination_field: string;
+  confidence: number;
+}
+
+export interface SuggestMappingsResponse {
+  pairs: SuggestedFieldPair[];
+  message: string | null;
 }
 
 export interface TableInfo {

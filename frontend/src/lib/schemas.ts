@@ -1,5 +1,14 @@
 import { z } from "zod";
 
+// Advanced numeric fields are rendered as text inputs that may be left
+// blank (→ "use the connector's default"), so the schema accepts "" and
+// coerces it to undefined rather than a coerced NaN/0.
+const optionalPositiveNumber = (max: number) =>
+  z
+    .union([z.literal(""), z.coerce.number().positive().max(max)])
+    .optional()
+    .transform((v) => (v === "" || v === undefined ? undefined : v));
+
 export const sourceSchema = z.object({
   name: z.string().min(1, "Name is required").max(255),
   type: z.enum(["postgres", "clickhouse"]),
@@ -8,6 +17,10 @@ export const sourceSchema = z.object({
   database: z.string().min(1, "Database name is required"),
   username: z.string().min(1, "Username is required"),
   password: z.string().optional(),
+  connect_timeout: optionalPositiveNumber(300),
+  command_timeout: optionalPositiveNumber(300),
+  min_pool_size: optionalPositiveNumber(100),
+  max_pool_size: optionalPositiveNumber(100),
 });
 export type SourceFormValues = z.infer<typeof sourceSchema>;
 
@@ -16,6 +29,7 @@ export const destinationSchema = z.object({
   type: z.enum(["bitrix24", "amocrm"]),
   api_url: z.string().min(1, "API URL is required").url("Must be a valid URL"),
   auth_token: z.string().optional(),
+  request_timeout: optionalPositiveNumber(300),
 });
 export type DestinationFormValues = z.infer<typeof destinationSchema>;
 
@@ -47,3 +61,14 @@ export const syncSchema = z.object({
   status: z.enum(["active", "paused", "inactive"]).default("active"),
 });
 export type SyncFormValues = z.infer<typeof syncSchema>;
+
+export const settingsSchema = z.object({
+  scheduler_enabled: z.boolean(),
+  scheduler_poll_interval_seconds: z.coerce.number().int().min(5).max(3600),
+  llm_enabled: z.boolean(),
+  llm_base_url: z.string().min(1, "Ollama URL is required"),
+  llm_model: z.string().min(1, "Model name is required"),
+  default_connect_timeout_seconds: z.coerce.number().positive().max(300),
+  default_request_timeout_seconds: z.coerce.number().positive().max(300),
+});
+export type SettingsFormValues = z.infer<typeof settingsSchema>;

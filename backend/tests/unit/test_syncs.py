@@ -1,8 +1,8 @@
 import pytest
 from datetime import datetime
 from httpx import AsyncClient
-from app.features.syncs.schemas import SyncRead, SyncListResponse
-from app.core.exceptions import ValidationError
+from app.features.syncs.schemas import SyncRead, SyncListResponse, SyncRunRead
+from app.core.exceptions import ValidationError, NotFoundError
 
 
 @pytest.mark.asyncio
@@ -149,10 +149,79 @@ async def test_update_sync(client: AsyncClient, sync_service):
 
 @pytest.mark.asyncio
 async def test_run_sync_now(client: AsyncClient, sync_service):
-    sync_service.run_now.return_value = None
+    now = datetime.now()
+    expected = SyncRunRead(
+        id=1,
+        sync_id=1,
+        status="success",
+        trigger="manual",
+        started_at=now,
+        finished_at=now,
+        records_read=5,
+        records_written=5,
+        error_message=None,
+    )
+    sync_service.run_now.return_value = expected
+
     response = await client.post("/api/v1/syncs/1/run")
-    assert response.status_code == 202
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["records_written"] == 5
     sync_service.run_now.assert_called_once_with(1)
+
+
+@pytest.mark.asyncio
+async def test_run_sync_now_not_found(client: AsyncClient, sync_service):
+    sync_service.run_now.side_effect = NotFoundError("Sync not found")
+    response = await client.post("/api/v1/syncs/999/run")
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_list_sync_runs(client: AsyncClient, sync_service):
+    now = datetime.now()
+    from app.features.syncs.schemas import SyncRunListResponse
+
+    sync_service.get_runs.return_value = SyncRunListResponse(
+        items=[
+            SyncRunRead(
+                id=1,
+                sync_id=1,
+                status="success",
+                trigger="scheduled",
+                started_at=now,
+                finished_at=now,
+                records_read=3,
+                records_written=3,
+                error_message=None,
+            )
+        ],
+        total=1,
+        skip=0,
+        limit=100,
+    )
+
+    response = await client.get("/api/v1/syncs/1/runs")
+
+    assert response.status_code == 200
+    assert response.json()["total"] == 1
+    sync_service.get_runs.assert_called_once_with(1, skip=0, limit=100)
+
+
+@pytest.mark.asyncio
+async def test_list_all_sync_runs(client: AsyncClient, sync_service):
+    from app.features.syncs.schemas import SyncRunListResponse
+
+    sync_service.get_all_runs.return_value = SyncRunListResponse(
+        items=[], total=0, skip=0, limit=100
+    )
+
+    response = await client.get("/api/v1/syncs/runs")
+
+    assert response.status_code == 200
+    sync_service.get_all_runs.assert_called_once_with(skip=0, limit=100)
 
 
 @pytest.mark.asyncio

@@ -19,7 +19,7 @@ class DestinationService:
     def __init__(self, repository: DestinationRepository):
         self.repository = repository
 
-    async def _build_connector(self, id: int) -> DestinationConnector:
+    async def build_connector(self, id: int) -> DestinationConnector:
         """Look up a destination and build a connector for it, with its
         auth token decrypted. Raises NotFoundError if the destination
         doesn't exist; propagates UnknownConnectorTypeError from the
@@ -29,10 +29,14 @@ class DestinationService:
             raise NotFoundError(f"Destination with id {id} not found")
 
         auth_token = decrypt_password(destination.auth_token)
+        advanced: dict[str, object] = {}
+        if destination.request_timeout is not None:
+            advanced["request_timeout"] = destination.request_timeout
         return ConnectorFactory.create_destination_connector(
             destination.type,
             api_url=destination.api_url,
             auth_token=auth_token,
+            **advanced,
         )
 
     async def test_connection(self, id: int) -> None:
@@ -43,7 +47,7 @@ class DestinationService:
             NotFoundError: If the destination doesn't exist.
             ConnectionFailedError: If the connection attempt fails.
         """
-        connector = await self._build_connector(id)
+        connector = await self.build_connector(id)
         async with connector:
             await connector.test_connection()
 
@@ -54,7 +58,7 @@ class DestinationService:
             NotFoundError: If the destination doesn't exist.
             ConnectionFailedError: If the connection attempt fails.
         """
-        connector = await self._build_connector(id)
+        connector = await self.build_connector(id)
         async with connector:
             return await connector.get_entities()
 
@@ -66,7 +70,7 @@ class DestinationService:
             TableNotFoundError: If the entity type doesn't exist.
             ConnectionFailedError: If the connection attempt fails.
         """
-        connector = await self._build_connector(id)
+        connector = await self.build_connector(id)
         async with connector:
             return await connector.get_entity_fields(entity)
 

@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from app.features.destinations.schemas import DestinationRead
 from app.features.mappings.schemas import MappingRead
 from app.features.sources.schemas import SourceRead
-from app.features.syncs.models import SyncStatus
+from app.features.syncs.models import SyncRunStatus, SyncRunTrigger, SyncStatus
 
 
 class SyncBase(BaseModel):
@@ -66,6 +66,32 @@ class SyncListResponse(BaseModel):
     """Schema for paginated list of syncs."""
 
     items: list[SyncRead]
+    total: int
+    skip: int
+    limit: int
+
+
+class SyncRunRead(BaseModel):
+    """Schema for reading one sync run's result."""
+
+    id: int
+    sync_id: int
+    status: SyncRunStatus
+    trigger: SyncRunTrigger
+    started_at: datetime
+    finished_at: datetime | None
+    records_read: int
+    records_written: int
+    error_message: str | None
+    sync_name: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class SyncRunListResponse(BaseModel):
+    """Schema for paginated list of sync runs."""
+
+    items: list[SyncRunRead]
     total: int
     skip: int
     limit: int

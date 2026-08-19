@@ -22,4 +22,8 @@ export const queryKeys = {
     ["destinations", destinationId, "entities", entity, "fields"] as const,
   mappings: ["mappings"] as const,
   syncs: ["syncs"] as const,
+  syncRuns: (syncId: number) => ["syncs", syncId, "runs"] as const,
+  allSyncRuns: ["syncs", "runs"] as const,
+  settings: ["settings"] as const,
+  llmStatus: ["settings", "llm", "status"] as const,
 };

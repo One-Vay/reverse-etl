@@ -59,6 +59,10 @@ class SourceRepository:
             database=data.database,
             username=data.username,
             password=data.password.get_secret_value(),
+            connect_timeout=data.connect_timeout,
+            command_timeout=data.command_timeout,
+            min_pool_size=data.min_pool_size,
+            max_pool_size=data.max_pool_size,
         )
         self.session.add(source)
         await self.session.flush()

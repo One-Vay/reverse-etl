@@ -66,3 +66,36 @@ class MappingListResponse(BaseModel):
     total: int
     skip: int
     limit: int
+
+
+class SuggestFieldInfo(BaseModel):
+    """One field offered to the AI mapping suggester — just enough to
+    reason about a match (name + type), not a full `ColumnSchema`."""
+
+    name: str
+    data_type: str = ""
+
+
+class SuggestMappingsRequest(BaseModel):
+    """Fields already fetched by the frontend's SourceColumnPicker /
+    destination-fields query — the suggester never fetches these itself,
+    it only reasons about the two lists it's given."""
+
+    source_columns: list[SuggestFieldInfo] = Field(..., min_length=1)
+    destination_fields: list[SuggestFieldInfo] = Field(..., min_length=1)
+
+
+class SuggestedFieldPair(BaseModel):
+    source_field: str
+    destination_field: str
+    confidence: float = Field(ge=0, le=1)
+
+
+class SuggestMappingsResponse(BaseModel):
+    """`pairs` is empty (with `message` explaining why) whenever AI
+    suggestions aren't usable — disabled, unreachable, or the model
+    returned nothing sane — never an HTTP error, so a missing/misbehaving
+    LLM never blocks the manual mapping flow."""
+
+    pairs: list[SuggestedFieldPair]
+    message: str | None = None

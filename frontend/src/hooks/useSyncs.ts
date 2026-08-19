@@ -124,19 +124,36 @@ export function useDeleteSync() {
   });
 }
 
+/** Runs a sync immediately and reports its *actual* outcome — the request
+ * only rejects for an app-level error (sync not found); a connector
+ * failure (bad credentials, unreachable host, ...) still resolves, just
+ * with `status: "failed"` on the returned SyncRun, so it's surfaced here
+ * as an error toast rather than a false "success". */
 export function useRunSyncNow() {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
 
   return useMutation({
     mutationFn: (id: number) => syncsApi.runNow(id),
-    onSuccess: (result) => {
+    onSuccess: (run) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.syncs });
-      showToast({
-        variant: "success",
-        title: "Pipeline triggered",
-        description: result.message,
-      });
+      queryClient.invalidateQueries({ queryKey: queryKeys.allSyncRuns });
+      queryClient.invalidateQueries({ queryKey: queryKeys.syncRuns(run.sync_id) });
+      if (run.status === "success") {
+        showToast({
+          variant: "success",
+          title: "Pipeline ran successfully",
+          description: `${run.records_written} of ${run.records_read} record${
+            run.records_read === 1 ? "" : "s"
+          } written.`,
+        });
+      } else {
+        showToast({
+          variant: "error",
+          title: "Pipeline run failed",
+          description: run.error_message ?? "Unknown error.",
+        });
+      }
     },
     onError: (error) => {
       showToast({
@@ -145,5 +162,22 @@ export function useRunSyncNow() {
         description: getErrorMessage(error),
       });
     },
+  });
+}
+
+/** Run history for one pipeline, for its detail view. */
+export function useSyncRuns(syncId: number | undefined) {
+  return useQuery({
+    queryKey: queryKeys.syncRuns(syncId ?? 0),
+    queryFn: () => syncsApi.listRuns(syncId as number, { limit: 50 }),
+    enabled: syncId != null && syncId > 0,
+  });
+}
+
+/** Run history across every pipeline, for the dashboard. */
+export function useAllSyncRuns() {
+  return useQuery({
+    queryKey: queryKeys.allSyncRuns,
+    queryFn: () => syncsApi.listAllRuns({ limit: 100 }),
   });
 }

@@ -14,6 +14,7 @@ class DestinationBase(BaseModel):
     type: DestinationType
     api_url: str = Field(..., min_length=1)
     auth_token: SecretStr
+    request_timeout: float | None = Field(None, gt=0, le=300)
 
     @field_validator("type", mode="before")
     @classmethod
@@ -37,6 +38,7 @@ class DestinationUpdate(BaseModel):
     type: DestinationType | None = None
     api_url: str | None = Field(None, min_length=1)
     auth_token: SecretStr | None = None
+    request_timeout: float | None = Field(None, gt=0, le=300)
 
 
 class DestinationRead(BaseModel):
@@ -46,6 +48,7 @@ class DestinationRead(BaseModel):
     name: str
     type: DestinationType
     api_url: str
+    request_timeout: float | None = None
     created_at: datetime
     updated_at: datetime
 
