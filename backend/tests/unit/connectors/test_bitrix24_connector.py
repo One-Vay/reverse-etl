@@ -293,6 +293,52 @@ class TestUpsertData:
         }
 
     @pytest.mark.asyncio
+    async def test_wraps_plain_values_for_multifield_codes(self, mock_async_client):
+        _, client = mock_async_client
+        connector = make_connector()
+        await connector.connect()
+        client.request = AsyncMock(return_value=make_response(json_data={"result": 1}))
+
+        await connector.upsert_data(
+            "lead",
+            [{"TITLE": "New lead", "PHONE": "+7 999 000-00-00", "EMAIL": "a@b.ru"}],
+        )
+
+        sent_fields = client.request.call_args.kwargs["json"]["fields"]
+        assert sent_fields["TITLE"] == "New lead"
+        assert sent_fields["PHONE"] == [
+            {"VALUE": "+7 999 000-00-00", "VALUE_TYPE": "WORK"}
+        ]
+        assert sent_fields["EMAIL"] == [{"VALUE": "a@b.ru", "VALUE_TYPE": "WORK"}]
+
+    @pytest.mark.asyncio
+    async def test_does_not_double_wrap_an_already_structured_multifield(
+        self, mock_async_client
+    ):
+        _, client = mock_async_client
+        connector = make_connector()
+        await connector.connect()
+        client.request = AsyncMock(return_value=make_response(json_data={"result": 1}))
+
+        already_wrapped = [{"VALUE": "+7 999 000-00-00", "VALUE_TYPE": "MOBILE"}]
+        await connector.upsert_data("lead", [{"PHONE": already_wrapped}])
+
+        sent_fields = client.request.call_args.kwargs["json"]["fields"]
+        assert sent_fields["PHONE"] == already_wrapped
+
+    @pytest.mark.asyncio
+    async def test_leaves_none_multifield_values_untouched(self, mock_async_client):
+        _, client = mock_async_client
+        connector = make_connector()
+        await connector.connect()
+        client.request = AsyncMock(return_value=make_response(json_data={"result": 1}))
+
+        await connector.upsert_data("lead", [{"TITLE": "x", "PHONE": None}])
+
+        sent_fields = client.request.call_args.kwargs["json"]["fields"]
+        assert sent_fields["PHONE"] is None
+
+    @pytest.mark.asyncio
     async def test_updates_records_with_an_id(self, mock_async_client):
         _, client = mock_async_client
         connector = make_connector()
