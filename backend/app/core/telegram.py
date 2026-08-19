@@ -12,16 +12,29 @@ import httpx
 
 _API_BASE = "https://api.telegram.org"
 
-# Telegram returns this exact description when the bot has never
-# exchanged a message with the given chat ID — Telegram has no chat
-# record to send into yet, distinct from a wrong ID or a revoked token.
-# The fix is on the user's side (message the bot first), so surface that
-# instead of a bare API error string.
 _CHAT_NOT_FOUND_HINT = (
     "Telegram doesn't recognize this chat ID yet. Open a chat with your bot "
     "and send it any message (e.g. /start) first — Telegram only lets a bot "
     "message chats it has already seen — then try the test again."
 )
+_BOT_TO_BOT_HINT = (
+    "This chat ID belongs to a bot — Telegram never lets a bot message "
+    "itself or another bot. Use your own personal chat ID instead (e.g. "
+    "message @userinfobot and it will reply with it), not the bot's ID "
+    "from BotFather."
+)
+
+# Telegram error strings that mean "the chat ID is wrong" rather than
+# "something's broken", each with a different, specific fix — worth
+# surfacing directly instead of the bare API string. Matched as
+# case-insensitive substrings against the API's `description` field.
+# Telegram's wording for the bot-to-bot case varies ("...to the bot" vs.
+# "...to bots"), so both variants are listed.
+_KNOWN_ERROR_HINTS = {
+    "chat not found": _CHAT_NOT_FOUND_HINT,
+    "can't send messages to the bot": _BOT_TO_BOT_HINT,
+    "can't send messages to bots": _BOT_TO_BOT_HINT,
+}
 
 
 class TelegramError(Exception):
@@ -59,8 +72,10 @@ async def send_message(
             detail = response.json().get("description", response.text)
         except ValueError:
             detail = response.text
-        if "chat not found" in detail.lower():
-            raise TelegramError(_CHAT_NOT_FOUND_HINT)
+        detail_lower = detail.lower()
+        for needle, hint in _KNOWN_ERROR_HINTS.items():
+            if needle in detail_lower:
+                raise TelegramError(hint)
         raise TelegramError(
             f"Telegram rejected the message (HTTP {response.status_code}): {detail}"
         )

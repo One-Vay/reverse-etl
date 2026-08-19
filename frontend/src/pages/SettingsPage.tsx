@@ -257,7 +257,7 @@ export function SettingsPage() {
                 label="Chat ID"
                 htmlFor="telegram-chat-id"
                 error={errors.telegram_chat_id?.message}
-                hint="Your user or group chat ID, e.g. 123456789. Message your bot at least once (e.g. /start) before testing — Telegram only lets a bot message chats it has already seen, otherwise it rejects the send with 'chat not found'."
+                hint="Your own personal chat ID (not the bot's ID from BotFather) — e.g. message @userinfobot to get it. Message your bot at least once (e.g. /start) before testing, too — Telegram only lets a bot message chats it has already seen."
               >
                 <Input
                   id="telegram-chat-id"

@@ -87,3 +87,31 @@ class TestSendMessage:
         with patch("httpx.AsyncClient", return_value=mock_client):
             with pytest.raises(TelegramError, match="doesn't recognize this chat ID"):
                 await send_message("123:abc", "999", "hello")
+
+    @pytest.mark.asyncio
+    async def test_gives_an_actionable_hint_when_chat_id_is_a_bot(self, mock_client):
+        mock_client.post = AsyncMock(
+            return_value=make_response(
+                403,
+                {"description": "Forbidden: the bot can't send messages to the bot"},
+                text="Forbidden: the bot can't send messages to the bot",
+            )
+        )
+        with patch("httpx.AsyncClient", return_value=mock_client):
+            with pytest.raises(TelegramError, match="belongs to a bot"):
+                await send_message("123:abc", "999", "hello")
+
+    @pytest.mark.asyncio
+    async def test_gives_an_actionable_hint_for_the_plural_bot_wording(
+        self, mock_client
+    ):
+        mock_client.post = AsyncMock(
+            return_value=make_response(
+                403,
+                {"description": "Forbidden: the bot can't send messages to bots"},
+                text="Forbidden: the bot can't send messages to bots",
+            )
+        )
+        with patch("httpx.AsyncClient", return_value=mock_client):
+            with pytest.raises(TelegramError, match="belongs to a bot"):
+                await send_message("123:abc", "999", "hello")
