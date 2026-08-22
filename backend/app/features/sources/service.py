@@ -7,12 +7,27 @@ from app.connectors.factory import ConnectorFactory
 from app.core.exceptions import ConflictError, NotFoundError
 from app.core.security import decrypt_password, encrypt_password
 from app.features.sources.repository import SourceRepository
+from app.features.sources.models import SourceType
 from app.features.sources.schemas import (
     SourceCreate,
     SourceListResponse,
     SourceRead,
     SourceUpdate,
 )
+
+# Which of a source's "advanced" columns each connector type actually
+# accepts — passing an unsupported one would raise a TypeError from the
+# connector's own __init__, so each type only forwards what it understands.
+# (e.g. ClickHouseConnector has no connection pool, only a request timeout.)
+_ADVANCED_FIELDS_BY_TYPE: dict[SourceType, tuple[str, ...]] = {
+    SourceType.POSTGRES: (
+        "connect_timeout",
+        "command_timeout",
+        "min_pool_size",
+        "max_pool_size",
+    ),
+    SourceType.CLICKHOUSE: ("connect_timeout",),
+}
 
 
 class SourceService:
@@ -21,7 +36,7 @@ class SourceService:
     def __init__(self, repository: SourceRepository):
         self.repository = repository
 
-    async def _build_connector(self, id: int) -> SourceConnector:
+    async def build_connector(self, id: int) -> SourceConnector:
         """Look up a source and build a connector for it, with its
         password decrypted. Raises NotFoundError if the source doesn't
         exist; propagates UnknownConnectorTypeError from the factory if
@@ -31,6 +46,11 @@ class SourceService:
             raise NotFoundError(f"Source with id {id} not found")
 
         password = decrypt_password(source.password)
+        advanced: dict[str, Any] = {
+            field: getattr(source, field)
+            for field in _ADVANCED_FIELDS_BY_TYPE.get(source.type, ())
+            if getattr(source, field) is not None
+        }
         return ConnectorFactory.create_source_connector(
             source.type,
             host=source.host,
@@ -38,6 +58,7 @@ class SourceService:
             database=source.database,
             username=source.username,
             password=password,
+            **advanced,
         )
 
     async def test_connection(self, id: int) -> None:
@@ -47,7 +68,7 @@ class SourceService:
             NotFoundError: If the source doesn't exist.
             ConnectionFailedError: If the connection attempt fails.
         """
-        connector = await self._build_connector(id)
+        connector = await self.build_connector(id)
         async with connector:
             await connector.test_connection()
 
@@ -58,7 +79,7 @@ class SourceService:
             NotFoundError: If the source doesn't exist.
             ConnectionFailedError: If the connection attempt fails.
         """
-        connector = await self._build_connector(id)
+        connector = await self.build_connector(id)
         async with connector:
             return await connector.get_tables()
 
@@ -72,7 +93,7 @@ class SourceService:
             TableNotFoundError: If the table/view doesn't exist.
             ConnectionFailedError: If the connection attempt fails.
         """
-        connector = await self._build_connector(id)
+        connector = await self.build_connector(id)
         async with connector:
             return await connector.get_table_schema(table_name, schema)
 
@@ -92,7 +113,7 @@ class SourceService:
             TableNotFoundError: If the table/view doesn't exist.
             ConnectionFailedError: If the connection attempt fails.
         """
-        connector = await self._build_connector(id)
+        connector = await self.build_connector(id)
         async with connector:
             return await connector.fetch_data(
                 table_name, columns=columns, schema=schema, limit=limit

@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { mappingsApi } from "@/api/mappings";
-import type { MappingInput } from "@/api/types";
+import type { MappingInput, SuggestFieldInfo } from "@/api/types";
 import { useToast } from "@/context/ToastContext";
 import { queryKeys } from "@/lib/queryClient";
 import { getErrorMessage } from "@/lib/utils";
@@ -57,6 +57,29 @@ export function useUpdateMapping() {
       showToast({
         variant: "error",
         title: "Couldn't update mapping",
+        description: getErrorMessage(error),
+      });
+    },
+  });
+}
+
+/** AI-suggested field pairings. Never rejects for "AI is disabled or
+ * unreachable" — the caller should check the resolved `.message`. */
+export function useSuggestMappings() {
+  const { showToast } = useToast();
+
+  return useMutation({
+    mutationFn: ({
+      sourceColumns,
+      destinationFields,
+    }: {
+      sourceColumns: SuggestFieldInfo[];
+      destinationFields: SuggestFieldInfo[];
+    }) => mappingsApi.suggest(sourceColumns, destinationFields),
+    onError: (error) => {
+      showToast({
+        variant: "error",
+        title: "Couldn't get AI suggestions",
         description: getErrorMessage(error),
       });
     },

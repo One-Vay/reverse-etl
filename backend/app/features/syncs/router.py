@@ -8,12 +8,15 @@ from app.core.exceptions import NotFoundError, ValidationError
 from app.features.destinations.repository import DestinationRepository
 from app.features.mappings.repository import MappingRepository
 from app.features.sources.repository import SourceRepository
-from app.features.syncs.repository import SyncRepository
+from app.features.syncs.repository import SyncRepository, SyncRunRepository
 from app.features.syncs.schemas import (
     SyncCreate,
     SyncListResponse,
     SyncRead,
+    SyncRunListResponse,
+    SyncRunRead,
     SyncUpdate,
+    UpcomingSyncRuns,
 )
 from app.features.syncs.service import SyncService
 
@@ -25,7 +28,8 @@ async def get_sync_service(session: AsyncSession = Depends(get_db)) -> SyncServi
     source_repo = SourceRepository(session)
     dest_repo = DestinationRepository(session)
     mapping_repo = MappingRepository(session)
-    return SyncService(sync_repo, source_repo, dest_repo, mapping_repo)
+    run_repo = SyncRunRepository(session)
+    return SyncService(sync_repo, source_repo, dest_repo, mapping_repo, run_repo)
 
 
 @router.get("/", response_model=SyncListResponse)
@@ -53,6 +57,29 @@ async def list_syncs(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
         )
+
+
+@router.get("/runs", response_model=SyncRunListResponse)
+async def list_all_sync_runs(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=1000),
+    service: SyncService = Depends(get_sync_service),
+):
+    """History of every sync run across all pipelines, newest first — for
+    the dashboard. Registered before `/{id}` so "runs" isn't parsed as an
+    id."""
+    return await service.get_all_runs(skip=skip, limit=limit)
+
+
+@router.get("/upcoming", response_model=list[UpcomingSyncRuns])
+async def list_upcoming_sync_runs(
+    days: int = Query(7, ge=1, le=30),
+    service: SyncService = Depends(get_sync_service),
+):
+    """Projected fire times for every active sync over the next `days`
+    days, for the dashboard's upcoming-runs calendar. Registered before
+    `/{id}` so "upcoming" isn't parsed as an id."""
+    return await service.get_upcoming(days=days)
 
 
 @router.get("/{id}", response_model=SyncRead)
@@ -102,11 +129,27 @@ async def delete_sync(id: int, service: SyncService = Depends(get_sync_service))
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
 
-@router.post("/{id}/run", status_code=status.HTTP_202_ACCEPTED)
+@router.post("/{id}/run", response_model=SyncRunRead)
 async def run_sync_now(id: int, service: SyncService = Depends(get_sync_service)):
-    """Manually trigger a sync job."""
+    """Run a sync immediately: reads the source, applies the mapping, and
+    writes to the destination, synchronously within this request (no task
+    queue at this project's scale). Returns the resulting `SyncRun` —
+    check its `status`/`error_message` for whether it actually succeeded,
+    the HTTP status only reflects that the sync itself was found."""
     try:
-        await service.run_now(id)
-        return {"message": f"Sync {id} triggered successfully"}
+        return await service.run_now(id)
+    except NotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+@router.get("/{id}/runs", response_model=SyncRunListResponse)
+async def list_sync_runs(
+    id: int,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=1000),
+    service: SyncService = Depends(get_sync_service),
+):
+    try:
+        return await service.get_runs(id, skip=skip, limit=limit)
     except NotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))

@@ -5,7 +5,7 @@ from __future__ import annotations
 import enum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Integer, String
+from sqlalchemy import Float, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base, TimestampMixin
@@ -36,6 +36,14 @@ class Source(Base, TimestampMixin):
     database: Mapped[str] = mapped_column(String(255), nullable=False)
     username: Mapped[str] = mapped_column(String(255), nullable=False)
     password: Mapped[str] = mapped_column(String(255), nullable=False)
+
+    # Advanced connection tuning, all optional — null means "use the
+    # connector's own built-in default" (see e.g.
+    # app.connectors.sources.postgres.PostgresConnector.__init__).
+    connect_timeout: Mapped[float | None] = mapped_column(Float, nullable=True)
+    command_timeout: Mapped[float | None] = mapped_column(Float, nullable=True)
+    min_pool_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    max_pool_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # One-to-many relationship with Mapping
     mappings: Mapped[list["Mapping"]] = relationship(

@@ -22,4 +22,13 @@ export const queryKeys = {
     ["destinations", destinationId, "entities", entity, "fields"] as const,
   mappings: ["mappings"] as const,
   syncs: ["syncs"] as const,
+  syncRuns: (syncId: number) => ["syncs", syncId, "runs"] as const,
+  allSyncRuns: ["syncs", "runs"] as const,
+  upcomingSyncRuns: (days: number) => ["syncs", "upcoming", days] as const,
+  settings: ["settings"] as const,
+  llmStatus: ["settings", "llm", "status"] as const,
+  agents: ["agents"] as const,
+  agentRuns: (agentId: number) => ["agents", agentId, "runs"] as const,
+  agentModels: ["agents", "models"] as const,
+  agentModelStatus: (model: string) => ["agents", "models", model, "status"] as const,
 };

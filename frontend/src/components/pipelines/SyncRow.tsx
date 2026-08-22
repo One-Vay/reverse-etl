@@ -3,7 +3,7 @@ import { ArrowRight, Pencil, Play, Trash2 } from "lucide-react";
 import type { Destination, Mapping, Source, Sync } from "@/api/types";
 import { SyncStatusBadge } from "@/components/pipelines/SyncStatusBadge";
 import { Button } from "@/components/ui/Button";
-import { formatRelativeTime } from "@/lib/utils";
+import { formatRelativeTime, formatSchedule } from "@/lib/utils";
 
 interface SyncRowProps {
   sync: Sync;
@@ -45,7 +45,7 @@ export function SyncRow({
           </span>
         </div>
         <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
-          <span className="font-mono">{sync.schedule}</span>
+          <span className="font-mono">{formatSchedule(sync)}</span>
           <span>Last run: {formatRelativeTime(sync.last_run)}</span>
           <span>Next run: {formatRelativeTime(sync.next_run)}</span>
         </div>

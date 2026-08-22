@@ -41,6 +41,23 @@ _SYSTEM_NAME = "Bitrix24"
 # singular noun used in their REST method names (`crm.{entity}.add`, ...).
 _ENTITIES = ("lead", "contact", "company", "deal")
 
+# Field codes Bitrix24 exposes as `crm_multifield` — the API expects a list
+# of `{"VALUE": ..., "VALUE_TYPE": ...}` objects rather than a scalar, and
+# silently drops a plain string/number with no error. Callers of
+# `upsert_data` (e.g. a mapping's field transformations) naturally produce
+# plain scalar values, so those are auto-wrapped here — this is a quirk of
+# Bitrix24's API shape, not something a caller should need to know about.
+_MULTIFIELD_CODES = frozenset({"PHONE", "EMAIL", "WEB", "IM", "LINK"})
+_DEFAULT_MULTIFIELD_VALUE_TYPE = "WORK"
+
+
+def _to_bitrix_field_value(field_code: str, value: Any) -> Any:
+    if field_code not in _MULTIFIELD_CODES or value is None:
+        return value
+    if isinstance(value, list):
+        return value
+    return [{"VALUE": value, "VALUE_TYPE": _DEFAULT_MULTIFIELD_VALUE_TYPE}]
+
 
 class Bitrix24Connector(DestinationConnector):
     """Reads entity metadata from, and writes records to, a Bitrix24 CRM
@@ -115,7 +132,11 @@ class Bitrix24Connector(DestinationConnector):
         written = 0
         for record in records:
             record_id = record.get("ID") or record.get("id")
-            fields = {k: v for k, v in record.items() if k.upper() != "ID"}
+            fields = {
+                k: _to_bitrix_field_value(k, v)
+                for k, v in record.items()
+                if k.upper() != "ID"
+            }
             if record_id is not None:
                 payload: dict[str, Any] = {"id": record_id, "fields": fields}
                 method = f"crm.{entity}.update"

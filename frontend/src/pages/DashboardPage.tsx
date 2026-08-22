@@ -4,18 +4,21 @@ import { AppShell } from "@/components/layout/AppShell";
 import { RunHistoryTable } from "@/components/dashboard/RunHistoryTable";
 import { SchedulerPanel } from "@/components/dashboard/SchedulerPanel";
 import { StatsCharts } from "@/components/dashboard/StatsCharts";
+import { UpcomingRunsTimeline } from "@/components/dashboard/UpcomingRunsTimeline";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { StatCard } from "@/components/ui/StatCard";
 import { useDestinations } from "@/hooks/useDestinations";
 import { useSources } from "@/hooks/useSources";
-import { useSyncs } from "@/hooks/useSyncs";
+import { useAllSyncRuns, useSyncs } from "@/hooks/useSyncs";
 
 export function DashboardPage() {
   const sourcesQuery = useSources();
   const destinationsQuery = useDestinations();
   const syncsQuery = useSyncs();
+  const runsQuery = useAllSyncRuns();
 
   const syncs = syncsQuery.data?.items ?? [];
+  const runs = runsQuery.data?.items ?? [];
   const activeSyncs = syncs.filter((sync) => sync.status === "active").length;
   const isLoadingStats =
     sourcesQuery.isLoading || destinationsQuery.isLoading || syncsQuery.isLoading;
@@ -62,12 +65,16 @@ export function DashboardPage() {
       )}
 
       <div className="mt-4">
-        <StatsCharts syncs={syncs} />
+        <StatsCharts syncs={syncs} runs={runs} />
+      </div>
+
+      <div className="mt-4">
+        <UpcomingRunsTimeline />
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <SchedulerPanel syncs={syncs} />
-        <RunHistoryTable syncs={syncs} />
+        <RunHistoryTable runs={runs} isLoading={runsQuery.isLoading} />
       </div>
     </AppShell>
   );

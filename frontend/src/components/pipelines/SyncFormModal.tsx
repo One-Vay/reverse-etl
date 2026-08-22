@@ -20,14 +20,6 @@ interface SyncFormModalProps {
   mappings: Mapping[];
 }
 
-const SCHEDULE_PRESETS = [
-  { label: "Every 15 minutes", value: "*/15 * * * *" },
-  { label: "Every 30 minutes", value: "*/30 * * * *" },
-  { label: "Hourly", value: "0 * * * *" },
-  { label: "Every 6 hours", value: "0 */6 * * *" },
-  { label: "Daily at 03:00", value: "0 3 * * *" },
-];
-
 function defaultValues(
   sources: Source[],
   destinations: Destination[],
@@ -38,7 +30,9 @@ function defaultValues(
     source_id: sources[0]?.id ?? 0,
     destination_id: destinations[0]?.id ?? 0,
     mapping_id: mappings[0]?.id ?? 0,
-    schedule: SCHEDULE_PRESETS[1].value,
+    interval_value: 1,
+    interval_unit: "hours",
+    run_at_time: null,
     incremental_field: "",
     status: "active",
   };
@@ -60,6 +54,7 @@ export function SyncFormModal({
 
   const {
     register,
+    watch,
     handleSubmit,
     reset,
     formState: { errors },
@@ -77,13 +72,17 @@ export function SyncFormModal({
             source_id: sync.source_id,
             destination_id: sync.destination_id,
             mapping_id: sync.mapping_id,
-            schedule: sync.schedule,
+            interval_value: sync.interval_value,
+            interval_unit: sync.interval_unit,
+            run_at_time: sync.run_at_time,
             incremental_field: sync.incremental_field ?? "",
             status: sync.status,
           }
         : defaultValues(sources, destinations, mappings),
     );
   }, [open, sync, sources, destinations, mappings, reset]);
+
+  const intervalUnit = watch("interval_unit");
 
   const isSaving = createSync.isPending || updateSync.isPending;
 
@@ -188,36 +187,49 @@ export function SyncFormModal({
           </Select>
         </FormField>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <FormField
-            label="Schedule"
-            htmlFor="sync-schedule"
-            error={errors.schedule?.message}
-            hint="Cron expression"
-            required
-          >
-            <Input
-              id="sync-schedule"
-              list="schedule-presets"
-              placeholder="*/30 * * * *"
-              {...register("schedule")}
-            />
-            <datalist id="schedule-presets">
-              {SCHEDULE_PRESETS.map((preset) => (
-                <option key={preset.value} value={preset.value}>
-                  {preset.label}
-                </option>
-              ))}
-            </datalist>
-          </FormField>
-          <FormField
-            label="Incremental field"
-            htmlFor="sync-incremental-field"
-            hint="Optional, e.g. updated_at"
-          >
-            <Input id="sync-incremental-field" {...register("incremental_field")} />
-          </FormField>
+        <div className="rounded-md border border-border p-3">
+          <p className="mb-3 text-xs font-medium text-muted-foreground">How often should this run?</p>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <FormField
+              label="Every"
+              htmlFor="sync-interval-value"
+              error={errors.interval_value?.message}
+              required
+            >
+              <Input
+                id="sync-interval-value"
+                type="number"
+                min={1}
+                max={intervalUnit === "days" ? 90 : 168}
+                {...register("interval_value")}
+              />
+            </FormField>
+            <FormField label="Unit" htmlFor="sync-interval-unit" required>
+              <Select id="sync-interval-unit" {...register("interval_unit")}>
+                <option value="hours">Hours</option>
+                <option value="days">Days</option>
+              </Select>
+            </FormField>
+            {intervalUnit === "days" && (
+              <FormField
+                label="At time"
+                htmlFor="sync-run-at-time"
+                error={errors.run_at_time?.message}
+                hint="24h, e.g. 09:00"
+              >
+                <Input id="sync-run-at-time" type="time" {...register("run_at_time")} />
+              </FormField>
+            )}
+          </div>
         </div>
+
+        <FormField
+          label="Incremental field"
+          htmlFor="sync-incremental-field"
+          hint="Optional, e.g. updated_at"
+        >
+          <Input id="sync-incremental-field" {...register("incremental_field")} />
+        </FormField>
 
         <FormField label="Status" htmlFor="sync-status">
           <Select id="sync-status" {...register("status")}>

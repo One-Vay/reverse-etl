@@ -56,6 +56,7 @@ class DestinationRepository:
             type=data.type,
             api_url=data.api_url,
             auth_token=data.auth_token.get_secret_value(),
+            request_timeout=data.request_timeout,
         )
         self.session.add(dest)
         await self.session.flush()

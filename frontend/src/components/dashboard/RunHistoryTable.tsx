@@ -1,34 +1,37 @@
-import { CheckCircle2, History, XCircle } from "lucide-react";
-import { useMemo } from "react";
+import { CheckCircle2, History, Loader2, XCircle } from "lucide-react";
 
-import type { Sync } from "@/api/types";
-import { DemoDataBadge } from "@/components/dashboard/DemoDataBadge";
+import type { SyncRun } from "@/api/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { generateMockRuns } from "@/lib/mockRunHistory";
 import { formatRelativeTime } from "@/lib/utils";
 
 interface RunHistoryTableProps {
-  syncs: Sync[];
+  runs: SyncRun[];
+  isLoading: boolean;
 }
 
-export function RunHistoryTable({ syncs }: RunHistoryTableProps) {
-  const runs = useMemo(() => generateMockRuns(syncs, 8), [syncs]);
+function durationSeconds(run: SyncRun): string {
+  if (!run.finished_at) return "—";
+  const ms = new Date(run.finished_at).getTime() - new Date(run.started_at).getTime();
+  return `${Math.max(0, Math.round(ms / 1000))}s`;
+}
 
+export function RunHistoryTable({ runs, isLoading }: RunHistoryTableProps) {
   return (
     <Card>
-      <CardHeader className="flex-row items-center justify-between space-y-0">
-        <div className="flex items-center gap-2">
-          <CardTitle>Recent pipeline runs</CardTitle>
-          <DemoDataBadge />
-        </div>
+      <CardHeader>
+        <CardTitle>Recent pipeline runs</CardTitle>
       </CardHeader>
       <CardContent>
-        {runs.length === 0 ? (
+        {isLoading ? (
+          <p className="flex h-32 items-center justify-center text-sm text-muted-foreground">
+            Loading…
+          </p>
+        ) : runs.length === 0 ? (
           <EmptyState
             icon={History}
-            title="No runs to show"
-            description="Create a pipeline to see its run history here."
+            title="No runs yet"
+            description="Run a pipeline (or wait for its schedule) to see its history here."
           />
         ) : (
           <div className="overflow-x-auto scrollbar-thin">
@@ -46,30 +49,34 @@ export function RunHistoryTable({ syncs }: RunHistoryTableProps) {
                 {runs.map((run) => (
                   <tr key={run.id}>
                     <td className="max-w-[180px] truncate py-2.5 pr-2 font-medium">
-                      {run.syncName}
+                      {run.sync_name ?? `Pipeline #${run.sync_id}`}
                     </td>
                     <td className="py-2.5 pr-2">
-                      {run.outcome === "success" ? (
+                      {run.status === "success" ? (
                         <span className="inline-flex items-center gap-1 text-success">
                           <CheckCircle2 className="h-3.5 w-3.5" /> Success
+                        </span>
+                      ) : run.status === "running" ? (
+                        <span className="inline-flex items-center gap-1 text-muted-foreground">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Running
                         </span>
                       ) : (
                         <span
                           className="inline-flex items-center gap-1 text-destructive"
-                          title={run.errorMessage}
+                          title={run.error_message ?? undefined}
                         >
                           <XCircle className="h-3.5 w-3.5" /> Failed
                         </span>
                       )}
                     </td>
                     <td className="py-2.5 pr-2 text-muted-foreground">
-                      {formatRelativeTime(run.startedAt)}
+                      {formatRelativeTime(run.started_at)}
                     </td>
                     <td className="py-2.5 pr-2 text-muted-foreground">
-                      {run.durationSeconds}s
+                      {durationSeconds(run)}
                     </td>
                     <td className="py-2.5 text-muted-foreground">
-                      {run.rowsSynced.toLocaleString()}
+                      {run.records_written.toLocaleString()} / {run.records_read.toLocaleString()}
                     </td>
                   </tr>
                 ))}

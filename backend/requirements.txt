@@ -20,9 +20,6 @@ cryptography==42.0.0
 python-jose[cryptography]==3.3.0  # optional, for JWT
 passlib[bcrypt]==1.7.4  # optional, for password hashing
 
-# Scheduling
-croniter==2.0.0  # for cron validation and next_run calculation
-
 # Other
 python-multipart==0.0.20  # for form data
 greenlet==3.0.3  # required for async SQLAlchemy

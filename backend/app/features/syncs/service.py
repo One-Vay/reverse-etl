@@ -1,20 +1,23 @@
 """Service layer for Sync entity."""
 
-from datetime import datetime, timezone
-
-import croniter
+from datetime import datetime, timedelta, timezone
 
 from app.core.exceptions import NotFoundError, ValidationError
 from app.features.destinations.repository import DestinationRepository
 from app.features.mappings.repository import MappingRepository
 from app.features.sources.repository import SourceRepository
-from app.features.syncs.models import SyncStatus
-from app.features.syncs.repository import SyncRepository
+from app.features.syncs import runner
+from app.features.syncs.models import SyncRunTrigger, SyncStatus
+from app.features.syncs.repository import SyncRepository, SyncRunRepository
+from app.features.syncs.scheduling import calculate_next_run, project_occurrences
 from app.features.syncs.schemas import (
     SyncCreate,
     SyncListResponse,
     SyncRead,
+    SyncRunListResponse,
+    SyncRunRead,
     SyncUpdate,
+    UpcomingSyncRuns,
 )
 
 
@@ -37,11 +40,13 @@ class SyncService:
         source_repository: SourceRepository,
         destination_repository: DestinationRepository,
         mapping_repository: MappingRepository,
+        run_repository: SyncRunRepository,
     ):
         self.repository = repository
         self.source_repository = source_repository
         self.destination_repository = destination_repository
         self.mapping_repository = mapping_repository
+        self.run_repository = run_repository
 
     async def get(self, id: int, load_relations: bool = True) -> SyncRead:
         sync = await self.repository.get_by_id(id)
@@ -103,16 +108,15 @@ class SyncService:
                 f"Mapping {data.mapping_id} does not belong to source {data.source_id}"
             )
 
-        # Validate schedule (cron expression)
-        if not self._is_valid_cron(data.schedule):
-            raise ValidationError(f"Invalid schedule format: '{data.schedule}'")
-
-        # Calculate next_run
-        next_run = self._calculate_next_run(data.schedule)
+        next_run = calculate_next_run(
+            data.interval_value,
+            data.interval_unit,
+            data.run_at_time,
+            anchor=datetime.now(timezone.utc),
+        )
 
         sync = await self.repository.create(data)
-        if next_run:
-            sync = await self.repository.update_next_run(sync.id, next_run) or sync
+        sync = await self.repository.update_next_run(sync.id, next_run) or sync
         return SyncRead.model_validate(sync)
 
     async def update(self, id: int, data: SyncUpdate) -> SyncRead:
@@ -146,9 +150,11 @@ class SyncService:
                     f"Mapping {data.mapping_id} does not belong to source {source_id}"
                 )
 
-        # Validate schedule if provided
-        if data.schedule is not None and not self._is_valid_cron(data.schedule):
-            raise ValidationError(f"Invalid schedule format: '{data.schedule}'")
+        schedule_changed = (
+            data.interval_value is not None
+            or data.interval_unit is not None
+            or data.run_at_time is not None
+        )
 
         sync = await self.repository.update(id, data)
         if not sync:
@@ -158,10 +164,14 @@ class SyncService:
         # update_next_run() call (like update_last_run()) rather than a field
         # on SyncUpdate, since next_run is server-computed, not part of the
         # public update payload.
-        if data.schedule is not None:
-            next_run = self._calculate_next_run(data.schedule)
-            if next_run:
-                sync = await self.repository.update_next_run(id, next_run) or sync
+        if schedule_changed:
+            next_run = calculate_next_run(
+                sync.interval_value,
+                sync.interval_unit,
+                sync.run_at_time,
+                anchor=datetime.now(timezone.utc),
+            )
+            sync = await self.repository.update_next_run(id, next_run) or sync
 
         return SyncRead.model_validate(sync)
 
@@ -170,35 +180,71 @@ class SyncService:
         if not deleted:
             raise NotFoundError(f"Sync with id {id} not found")
 
-    async def run_now(self, id: int) -> None:
-        """Manually trigger a sync run (updates last_run and schedules next_run)."""
+    async def run_now(self, id: int) -> SyncRunRead:
+        """Manually trigger a sync run: actually reads the source, applies
+        the mapping, and writes to the destination (see `runner.execute`),
+        then persists the outcome as a `SyncRun`.
+
+        Raises:
+            NotFoundError: If the sync doesn't exist.
+        """
         sync = await self.repository.get_by_id(id)
         if not sync:
             raise NotFoundError(f"Sync with id {id} not found")
 
-        # Update last_run to now
-        now = datetime.now(timezone.utc)
-        await self.repository.update_last_run(id, now)
+        run = await runner.execute(
+            sync,
+            session=self.repository.session,
+            trigger=SyncRunTrigger.MANUAL,
+        )
+        return SyncRunRead.model_validate(run)
 
-        # Calculate next_run based on schedule
-        next_run = self._calculate_next_run(sync.schedule)
-        if next_run:
-            await self.repository.update_next_run(id, next_run)
+    async def get_runs(
+        self, id: int, skip: int = 0, limit: int = 100
+    ) -> SyncRunListResponse:
+        """Raises NotFoundError if the sync doesn't exist."""
+        sync = await self.repository.get_by_id(id)
+        if not sync:
+            raise NotFoundError(f"Sync with id {id} not found")
 
-    @staticmethod
-    def _is_valid_cron(schedule: str) -> bool:
-        """Check if schedule is a valid cron expression."""
-        try:
-            croniter.croniter(schedule, datetime.now(timezone.utc))
-            return True
-        except (ValueError, croniter.CroniterBadCronError):
-            return False
+        total = await self.run_repository.count_by_sync(id)
+        items = await self.run_repository.get_by_sync(id, skip=skip, limit=limit)
+        return SyncRunListResponse(
+            items=[SyncRunRead.model_validate(item) for item in items],
+            total=total,
+            skip=skip,
+            limit=limit,
+        )
 
-    @staticmethod
-    def _calculate_next_run(schedule: str) -> datetime | None:
-        """Calculate the next run time based on cron schedule."""
-        try:
-            cron = croniter.croniter(schedule, datetime.now(timezone.utc))
-            return cron.get_next(datetime)
-        except Exception:
-            return None
+    async def get_all_runs(
+        self, skip: int = 0, limit: int = 100
+    ) -> SyncRunListResponse:
+        total = await self.run_repository.count_all()
+        items = await self.run_repository.get_all(skip=skip, limit=limit)
+        return SyncRunListResponse(
+            items=[SyncRunRead.model_validate(item) for item in items],
+            total=total,
+            skip=skip,
+            limit=limit,
+        )
+
+    async def get_upcoming(self, days: int = 7) -> list[UpcomingSyncRuns]:
+        """Projected fire times for every active sync over the next `days`
+        days, for the dashboard's upcoming-runs calendar."""
+        active = await self.repository.get_active()
+        within = timedelta(days=days)
+        return [
+            UpcomingSyncRuns(
+                sync_id=sync.id,
+                sync_name=sync.name,
+                occurrences=project_occurrences(
+                    sync.interval_value,
+                    sync.interval_unit,
+                    sync.run_at_time,
+                    starting_from=sync.next_run,
+                    within=within,
+                ),
+            )
+            for sync in active
+            if sync.next_run is not None
+        ]

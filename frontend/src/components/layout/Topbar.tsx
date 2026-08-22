@@ -1,4 +1,4 @@
-import { Cable, LayoutDashboard, Waypoints } from "lucide-react";
+import { Cable, LayoutDashboard, Settings, Waypoints } from "lucide-react";
 import { NavLink } from "react-router-dom";
 
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { to: "/", label: "Connections", icon: Cable, end: true },
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, end: false },
   { to: "/pipelines", label: "Pipelines", icon: Waypoints, end: false },
+  { to: "/settings", label: "Settings", icon: Settings, end: false },
 ];
 
 interface TopbarProps {

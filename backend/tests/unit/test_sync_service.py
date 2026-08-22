@@ -10,12 +10,19 @@ with a real, correctly-calculated datetime.
 """
 
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.core.exceptions import ValidationError
-from app.features.syncs.models import Sync, SyncStatus
+from app.core.exceptions import NotFoundError, ValidationError
+from app.features.syncs.models import (
+    IntervalUnit,
+    Sync,
+    SyncRun,
+    SyncRunStatus,
+    SyncRunTrigger,
+    SyncStatus,
+)
 from app.features.syncs.schemas import SyncCreate, SyncUpdate
 from app.features.syncs.service import SyncService
 
@@ -27,7 +34,10 @@ def make_sync(**overrides) -> Sync:
     sync.source_id = overrides.get("source_id", 1)
     sync.destination_id = overrides.get("destination_id", 1)
     sync.mapping_id = overrides.get("mapping_id", 1)
-    sync.schedule = overrides.get("schedule", "*/30 * * * *")
+    sync.interval_value = overrides.get("interval_value", 1)
+    sync.interval_unit = overrides.get("interval_unit", IntervalUnit.HOURS)
+    sync.run_at_time = overrides.get("run_at_time", None)
+    sync.next_run = overrides.get("next_run", None)
     sync.incremental_field = overrides.get("incremental_field", None)
     sync.status = overrides.get("status", SyncStatus.ACTIVE)
     # MagicMock(spec=Sync) still auto-generates these relationship attrs as
@@ -43,6 +53,7 @@ def make_sync(**overrides) -> Sync:
 @pytest.fixture
 def repos():
     sync_repo = MagicMock()
+    sync_repo.session = MagicMock()
     sync_repo.get_by_id = AsyncMock(return_value=make_sync())
     sync_repo.create = AsyncMock(return_value=make_sync())
     sync_repo.update = AsyncMock(return_value=make_sync())
@@ -58,13 +69,15 @@ def repos():
     mapping_repo = MagicMock()
     mapping_repo.get_by_id = AsyncMock(return_value=MagicMock(id=1, source_id=1))
 
-    return sync_repo, source_repo, destination_repo, mapping_repo
+    run_repo = MagicMock()
+
+    return sync_repo, source_repo, destination_repo, mapping_repo, run_repo
 
 
 @pytest.fixture
 def service(repos):
-    sync_repo, source_repo, destination_repo, mapping_repo = repos
-    return SyncService(sync_repo, source_repo, destination_repo, mapping_repo)
+    sync_repo, source_repo, destination_repo, mapping_repo, run_repo = repos
+    return SyncService(sync_repo, source_repo, destination_repo, mapping_repo, run_repo)
 
 
 class TestCreate:
@@ -76,7 +89,8 @@ class TestCreate:
             source_id=1,
             destination_id=1,
             mapping_id=1,
-            schedule="0 * * * *",
+            interval_value=1,
+            interval_unit="hours",
         )
 
         await service.create(data)
@@ -90,15 +104,23 @@ class TestCreate:
 
 class TestUpdate:
     @pytest.mark.asyncio
-    async def test_recalculates_next_run_when_schedule_changes(self, service, repos):
+    async def test_recalculates_next_run_when_interval_changes(self, service, repos):
         sync_repo, *_ = repos
 
-        await service.update(1, SyncUpdate(schedule="0 0 * * *"))
+        await service.update(1, SyncUpdate(interval_value=6, interval_unit="hours"))
 
         sync_repo.update_next_run.assert_awaited_once()
         call_id, call_next_run = sync_repo.update_next_run.call_args.args
         assert call_id == 1
         assert isinstance(call_next_run, datetime)
+
+    @pytest.mark.asyncio
+    async def test_recalculates_next_run_when_run_at_time_changes(self, service, repos):
+        sync_repo, *_ = repos
+
+        await service.update(1, SyncUpdate(run_at_time="14:30"))
+
+        sync_repo.update_next_run.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_does_not_touch_next_run_for_unrelated_field_changes(
@@ -110,24 +132,59 @@ class TestUpdate:
 
         sync_repo.update_next_run.assert_not_awaited()
 
-    @pytest.mark.asyncio
-    async def test_rejects_an_invalid_schedule(self, service):
-        with pytest.raises(ValidationError):
-            await service.update(1, SyncUpdate(schedule="not a cron expression"))
+    def test_rejects_a_malformed_run_at_time_at_the_schema_level(self):
+        with pytest.raises(ValueError, match="HH:MM"):
+            SyncUpdate(run_at_time="not a time")
+
+    def test_rejects_an_out_of_range_interval_value_at_the_schema_level(self):
+        with pytest.raises(ValueError):
+            SyncCreate(
+                name="x",
+                source_id=1,
+                destination_id=1,
+                mapping_id=1,
+                interval_value=0,
+                interval_unit="hours",
+            )
 
 
 class TestRunNow:
     @pytest.mark.asyncio
-    async def test_updates_last_run_and_next_run(self, service, repos):
+    async def test_delegates_to_the_runner_and_returns_its_result(self, service, repos):
         sync_repo, *_ = repos
+        fake_sync = make_sync()
+        sync_repo.get_by_id = AsyncMock(return_value=fake_sync)
+        fake_run = MagicMock(spec=SyncRun)
+        fake_run.id = 1
+        fake_run.sync_id = 1
+        fake_run.status = SyncRunStatus.SUCCESS
+        fake_run.trigger = SyncRunTrigger.MANUAL
+        fake_run.started_at = datetime.now(timezone.utc)
+        fake_run.finished_at = datetime.now(timezone.utc)
+        fake_run.records_read = 3
+        fake_run.records_written = 3
+        fake_run.error_message = None
+        fake_run.sync_name = fake_sync.name
 
-        await service.run_now(1)
+        with patch(
+            "app.features.syncs.service.runner.execute",
+            AsyncMock(return_value=fake_run),
+        ) as mock_execute:
+            result = await service.run_now(1)
 
-        sync_repo.update_last_run.assert_awaited_once()
-        sync_repo.update_next_run.assert_awaited_once()
-        call_id, call_next_run = sync_repo.update_next_run.call_args.args
-        assert call_id == 1
-        assert isinstance(call_next_run, datetime)
+        mock_execute.assert_awaited_once_with(
+            fake_sync, session=sync_repo.session, trigger=SyncRunTrigger.MANUAL
+        )
+        assert result.records_written == 3
+        assert result.status == "success"
+
+    @pytest.mark.asyncio
+    async def test_raises_not_found_for_a_missing_sync(self, service, repos):
+        sync_repo, *_ = repos
+        sync_repo.get_by_id = AsyncMock(return_value=None)
+
+        with pytest.raises(NotFoundError):
+            await service.run_now(999)
 
 
 class TestGetListStatusFilter:

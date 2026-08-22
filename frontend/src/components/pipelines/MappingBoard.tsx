@@ -1,9 +1,17 @@
-import { ArrowLeftRight, KeyRound, Link2, Unlink } from "lucide-react";
+import { ArrowLeftRight, KeyRound, Link2, Sparkles, Unlink } from "lucide-react";
 import { useState } from "react";
 
 import { useDestinationEntityFields } from "@/hooks/useDestinations";
+import { useSuggestMappings } from "@/hooks/useMappings";
+import { useSettings } from "@/hooks/useSettings";
 import { useSourceTableSchema } from "@/hooks/useSources";
+import { Button } from "@/components/ui/Button";
+import { useToast } from "@/context/ToastContext";
 import { cn } from "@/lib/utils";
+
+// Suggested pairs below this confidence are dropped rather than
+// auto-applied — low-confidence guesses are more distracting than useful.
+const SUGGESTION_CONFIDENCE_THRESHOLD = 0.5;
 
 interface FieldMappingPair {
   source_field: string;
@@ -49,6 +57,9 @@ export function MappingBoard({
 
   const columnsQuery = useSourceTableSchema(sourceId, table, schema);
   const fieldsQuery = useDestinationEntityFields(destinationId, entity);
+  const settingsQuery = useSettings();
+  const suggestMappings = useSuggestMappings();
+  const { showToast } = useToast();
 
   if (!sourceId || !table || !destinationId || !entity) return null;
 
@@ -114,13 +125,61 @@ export function MappingBoard({
     );
   }
 
+  const llmEnabled = settingsQuery.data?.llm_enabled ?? false;
+
+  const handleSuggest = async () => {
+    const result = await suggestMappings.mutateAsync({
+      sourceColumns: columns.map((c) => ({ name: c.name, data_type: c.data_type })),
+      destinationFields: fields.map((f) => ({ name: f.name, data_type: f.data_type })),
+    });
+    // A suggestion only counts as "new" if it changes an actual connection —
+    // otherwise a click that re-suggests already-mapped fields would look
+    // like nothing happened, with no visible change and no feedback.
+    let appliedCount = 0;
+    for (const pair of result.pairs) {
+      if (pair.confidence < SUGGESTION_CONFIDENCE_THRESHOLD) continue;
+      if (sourceByField.get(pair.source_field) === pair.destination_field) continue;
+      onConnect(pair.source_field, pair.destination_field);
+      appliedCount += 1;
+    }
+
+    if (appliedCount > 0) {
+      showToast({
+        variant: "success",
+        title: `Applied ${appliedCount} AI suggestion${appliedCount === 1 ? "" : "s"}`,
+      });
+    } else if (result.pairs.length > 0) {
+      showToast({
+        variant: "info",
+        title: "Nothing new to suggest",
+        description: "These fields are already mapped.",
+      });
+    }
+  };
+
   return (
     <div className="flex flex-col gap-2 rounded-md border border-border p-3">
-      <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-        <ArrowLeftRight className="h-3.5 w-3.5" />
-        Drag a source column onto a destination field, or click one of each to connect
-        them
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+          <ArrowLeftRight className="h-3.5 w-3.5" />
+          Drag a source column onto a destination field, or click one of each to
+          connect them
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          loading={suggestMappings.isPending}
+          disabled={!llmEnabled}
+          title={llmEnabled ? undefined : "Enable AI mapping suggestions in Settings"}
+          onClick={handleSuggest}
+        >
+          <Sparkles className="h-3.5 w-3.5" /> Suggest with AI
+        </Button>
       </div>
+      {suggestMappings.data?.pairs.length === 0 && suggestMappings.data.message && (
+        <p className="text-xs text-muted-foreground">{suggestMappings.data.message}</p>
+      )}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="flex flex-col gap-1.5">
