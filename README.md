@@ -19,6 +19,11 @@ configurable from a web console — no code, no config files, no redeploys.
   (success/failure, record counts), flagged when it ran late
 - 📅 **Upcoming-runs calendar** on the dashboard — every active pipeline's
   next 7 days of scheduled fires at a glance
+- 🧠 **Data agents** — describe a goal (e.g. "increase conversion", "move
+  from B2C to B2B") and planned actions, and a per-agent local LLM plans a
+  selection strategy, scores newly-arrived rows against it, and loads only
+  the matching subset into the CRM instead of the whole table. Each agent
+  picks its own Ollama model independently of the one configured in Settings.
 - 🖥 **Fully web-configurable** — connections, mappings, schedules, the
   scheduler itself, and the AI/Telegram integrations are all managed from the
   UI; nothing requires editing `.env` or redeploying
