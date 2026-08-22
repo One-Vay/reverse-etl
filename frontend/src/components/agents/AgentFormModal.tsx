@@ -37,6 +37,7 @@ function defaultValues(
     selection_strategy: "scoring",
     selection_threshold: 0.6,
     incremental_field: "",
+    annotation_field: "",
   };
 }
 
@@ -86,6 +87,7 @@ export function AgentFormModal({
             selection_strategy: agent.selection_strategy,
             selection_threshold: agent.selection_threshold,
             incremental_field: agent.incremental_field ?? "",
+            annotation_field: agent.annotation_field ?? "",
           }
         : defaultValues(destinations, mappings),
     );
@@ -98,6 +100,7 @@ export function AgentFormModal({
     const payload = {
       ...values,
       incremental_field: values.incremental_field || null,
+      annotation_field: values.annotation_field || null,
     };
     try {
       if (isEditing && agent) {
@@ -289,6 +292,18 @@ export function AgentFormModal({
             <Input id="agent-incremental-field" {...register("incremental_field")} />
           </FormField>
         </div>
+
+        <FormField
+          label="Annotation field"
+          htmlFor="agent-annotation-field"
+          hint='Optional destination field (e.g. "COMMENTS") to receive a note with the selection score and reason on every record — without this, nothing on the loaded record explains why it was chosen.'
+        >
+          <Input
+            id="agent-annotation-field"
+            placeholder="COMMENTS"
+            {...register("annotation_field")}
+          />
+        </FormField>
 
         <div className="mt-2 flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={onClose}>

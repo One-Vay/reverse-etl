@@ -29,6 +29,7 @@ def make_agent(**overrides):
     )
     agent.selection_threshold = overrides.get("selection_threshold", 0.6)
     agent.incremental_field = overrides.get("incremental_field", None)
+    agent.annotation_field = overrides.get("annotation_field", None)
     agent.feature_notes = overrides.get("feature_notes", [])
     agent.created_at = overrides.get("created_at", datetime.now(timezone.utc))
     agent.updated_at = overrides.get("updated_at", datetime.now(timezone.utc))
@@ -75,14 +76,49 @@ def repos():
         )
     )
 
-    return agent_repo, destination_repo, mapping_repo, run_repo, settings_repo
+    message_repo = MagicMock()
+    message_repo.get_by_agent = AsyncMock(return_value=[])
+
+    _next_message_id = iter(range(1, 1000))
+
+    async def _create_message(**kwargs):
+        message = MagicMock()
+        message.id = next(_next_message_id)
+        message.agent_id = kwargs["agent_id"]
+        message.role = kwargs["role"]
+        message.content = kwargs["content"]
+        message.created_at = kwargs["created_at"]
+        return message
+
+    message_repo.create = AsyncMock(side_effect=_create_message)
+
+    return (
+        agent_repo,
+        destination_repo,
+        mapping_repo,
+        run_repo,
+        settings_repo,
+        message_repo,
+    )
 
 
 @pytest.fixture
 def service(repos):
-    agent_repo, destination_repo, mapping_repo, run_repo, settings_repo = repos
+    (
+        agent_repo,
+        destination_repo,
+        mapping_repo,
+        run_repo,
+        settings_repo,
+        message_repo,
+    ) = repos
     return AgentService(
-        agent_repo, destination_repo, mapping_repo, run_repo, settings_repo
+        agent_repo,
+        destination_repo,
+        mapping_repo,
+        run_repo,
+        settings_repo,
+        message_repo,
     )
 
 
@@ -123,7 +159,7 @@ class TestCreate:
 class TestGeneratePlan:
     @pytest.mark.asyncio
     async def test_raises_when_llm_is_disabled(self, service, repos):
-        *_, settings_repo = repos
+        _, _, _, _, settings_repo, _ = repos
         settings_repo.get = AsyncMock(return_value=MagicMock(llm_enabled=False))
 
         with pytest.raises(ValidationError):
@@ -202,6 +238,7 @@ class TestRunNow:
         fake_run.started_at = datetime.now(timezone.utc)
         fake_run.finished_at = datetime.now(timezone.utc)
         fake_run.selection_summary = "Selected 3 of 10 rows."
+        fake_run.row_details = []
 
         with (
             patch(
@@ -219,7 +256,7 @@ class TestRunNow:
 
     @pytest.mark.asyncio
     async def test_sends_a_telegram_report_when_enabled(self, service, repos):
-        agent_repo, _, _, _, settings_repo = repos
+        agent_repo, _, _, _, settings_repo, _ = repos
         agent_repo.get_by_id = AsyncMock(
             return_value=make_agent(
                 status=AgentStatus.READY, plan={"selection_rule": "x"}
@@ -246,6 +283,7 @@ class TestRunNow:
         fake_run.started_at = datetime.now(timezone.utc)
         fake_run.finished_at = datetime.now(timezone.utc)
         fake_run.selection_summary = "Selected 3 of 10 rows."
+        fake_run.row_details = []
 
         with (
             patch(
@@ -270,6 +308,95 @@ class TestRunNow:
 
         with pytest.raises(NotFoundError):
             await service.run_now(999)
+
+
+class TestPreview:
+    @pytest.mark.asyncio
+    async def test_raises_when_agent_has_no_plan_yet(self, service):
+        with pytest.raises(ValidationError, match="Generate a plan"):
+            await service.preview(1)
+
+    @pytest.mark.asyncio
+    async def test_returns_the_prepared_selection(self, service, repos):
+        agent_repo, *_ = repos
+        agent_repo.get_by_id = AsyncMock(
+            return_value=make_agent(
+                status=AgentStatus.READY, plan={"selection_rule": "x"}
+            )
+        )
+        prepared = MagicMock()
+        prepared.rows_considered = 5
+        prepared.records_to_write = [{"EMAIL": "a@x.com"}]
+        prepared.row_details = [
+            {
+                "index": 0,
+                "score": 0.9,
+                "reason": "hot",
+                "selected": True,
+                "record": {"EMAIL": "a@x.com"},
+            }
+        ]
+
+        with patch(
+            "app.features.agents.service.runner.preview",
+            AsyncMock(return_value=prepared),
+        ):
+            result = await service.preview(1)
+
+        assert result.rows_considered == 5
+        assert result.rows_selected == 1
+        assert result.row_details[0].score == 0.9
+
+    @pytest.mark.asyncio
+    async def test_raises_not_found_for_a_missing_agent(self, service, repos):
+        agent_repo, *_ = repos
+        agent_repo.get_by_id = AsyncMock(return_value=None)
+
+        with pytest.raises(NotFoundError):
+            await service.preview(999)
+
+
+class TestChat:
+    @pytest.mark.asyncio
+    async def test_sends_a_message_and_persists_both_sides(self, service, repos):
+        agent_repo, _, _, run_repo, _, message_repo = repos
+        run_repo.get_by_agent = AsyncMock(return_value=[])
+
+        with patch(
+            "app.features.agents.service.agent_chat.reply",
+            AsyncMock(return_value="Try mapping full_name to NAME as well."),
+        ):
+            result = await service.send_chat_message(1, "Why no name on the lead?")
+
+        assert message_repo.create.await_count == 2
+        assert result.user_message.content == "Why no name on the lead?"
+        assert (
+            result.assistant_message.content == "Try mapping full_name to NAME as well."
+        )
+
+    @pytest.mark.asyncio
+    async def test_raises_when_llm_is_disabled(self, service, repos):
+        _, _, _, _, settings_repo, _ = repos
+        settings_repo.get = AsyncMock(return_value=MagicMock(llm_enabled=False))
+
+        with pytest.raises(ValidationError):
+            await service.send_chat_message(1, "hello")
+
+    @pytest.mark.asyncio
+    async def test_raises_not_found_for_a_missing_agent(self, service, repos):
+        agent_repo, *_ = repos
+        agent_repo.get_by_id = AsyncMock(return_value=None)
+
+        with pytest.raises(NotFoundError):
+            await service.send_chat_message(999, "hello")
+
+    @pytest.mark.asyncio
+    async def test_history_raises_not_found_for_a_missing_agent(self, service, repos):
+        agent_repo, *_ = repos
+        agent_repo.get_by_id = AsyncMock(return_value=None)
+
+        with pytest.raises(NotFoundError):
+            await service.get_chat_history(999)
 
 
 class TestUpdate:

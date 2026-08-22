@@ -1,6 +1,9 @@
 import { api, buildQuery } from "@/api/client";
 import type {
+  AgentPreview,
   AgentRun,
+  ChatMessage,
+  ChatResponse,
   DataAgent,
   DataAgentInput,
   LLMModelStatus,
@@ -20,6 +23,9 @@ export const agentsApi = {
   /** Runs synchronously and returns the resulting AgentRun — check
    * `.status`/`.error_message` for whether the run itself succeeded. */
   runNow: (id: number) => api.post<AgentRun>(`/agents/${id}/run`),
+  /** Dry-runs the selection step — scores due rows and shows what would
+   * be written, without touching the destination or recording a run. */
+  preview: (id: number) => api.post<AgentPreview>(`/agents/${id}/preview`),
   listRuns: (id: number, params: ListParams = {}) =>
     api.get<ListResponse<AgentRun>>(`/agents/${id}/runs${buildQuery(params)}`),
   listModels: () => api.get<string[]>("/agents/models"),
@@ -27,4 +33,7 @@ export const agentsApi = {
     api.get<LLMModelStatus>(`/agents/models/${encodeURIComponent(model)}/status`),
   pullModel: (model: string) =>
     api.post<{ message: string }>("/agents/models/pull", { model }),
+  listMessages: (id: number) => api.get<ChatMessage[]>(`/agents/${id}/messages`),
+  sendMessage: (id: number, message: string) =>
+    api.post<ChatResponse>(`/agents/${id}/messages`, { message }),
 };

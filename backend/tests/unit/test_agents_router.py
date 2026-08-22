@@ -8,10 +8,14 @@ from httpx import AsyncClient
 from app.core.exceptions import NotFoundError, ValidationError
 from app.features.agents.schemas import (
     AgentListResponse,
+    AgentPreview,
     AgentRead,
     AgentRunListResponse,
     AgentRunRead,
+    ChatMessageRead,
+    ChatResponse,
     LLMModelStatus,
+    RowDetail,
 )
 
 
@@ -28,6 +32,7 @@ def make_agent_read(**overrides) -> AgentRead:
         "selection_strategy": "scoring",
         "selection_threshold": 0.6,
         "incremental_field": None,
+        "annotation_field": None,
         "status": "draft",
         "plan": None,
         "plan_generated_at": None,
@@ -51,6 +56,7 @@ def make_run_read(**overrides) -> AgentRunRead:
         "rows_selected": 3,
         "rows_written": 3,
         "selection_summary": "Selected 3 of 10 rows.",
+        "row_details": [],
         "error_message": None,
     }
     defaults.update(overrides)
@@ -214,3 +220,96 @@ async def test_delete_agent(client: AsyncClient, agent_service):
     response = await client.delete("/api/v1/agents/1")
 
     assert response.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_preview_agent(client: AsyncClient, agent_service):
+    agent_service.preview.return_value = AgentPreview(
+        rows_considered=5,
+        rows_selected=1,
+        row_details=[
+            RowDetail(
+                index=0,
+                score=0.9,
+                reason="hot",
+                selected=True,
+                record={"EMAIL": "a@x.com"},
+            )
+        ],
+    )
+
+    response = await client.post("/api/v1/agents/1/preview")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["rows_considered"] == 5
+    assert body["row_details"][0]["record"] == {"EMAIL": "a@x.com"}
+
+
+@pytest.mark.asyncio
+async def test_preview_agent_without_a_plan_is_unprocessable(
+    client: AsyncClient, agent_service
+):
+    agent_service.preview.side_effect = ValidationError(
+        "Generate a plan for this agent before previewing it."
+    )
+
+    response = await client.post("/api/v1/agents/1/preview")
+
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_list_agent_messages(client: AsyncClient, agent_service):
+    agent_service.get_chat_history.return_value = [
+        ChatMessageRead(
+            id=1,
+            agent_id=1,
+            role="user",
+            content="hi",
+            created_at=datetime.now(timezone.utc),
+        )
+    ]
+
+    response = await client.get("/api/v1/agents/1/messages")
+
+    assert response.status_code == 200
+    assert response.json()[0]["content"] == "hi"
+
+
+@pytest.mark.asyncio
+async def test_send_agent_message(client: AsyncClient, agent_service):
+    now = datetime.now(timezone.utc)
+    agent_service.send_chat_message.return_value = ChatResponse(
+        user_message=ChatMessageRead(
+            id=1, agent_id=1, role="user", content="Why no name?", created_at=now
+        ),
+        assistant_message=ChatMessageRead(
+            id=2,
+            agent_id=1,
+            role="assistant",
+            content="Map full_name to NAME too.",
+            created_at=now,
+        ),
+    )
+
+    response = await client.post(
+        "/api/v1/agents/1/messages", json={"message": "Why no name?"}
+    )
+
+    assert response.status_code == 200
+    assert (
+        response.json()["assistant_message"]["content"] == "Map full_name to NAME too."
+    )
+    agent_service.send_chat_message.assert_called_once_with(1, "Why no name?")
+
+
+@pytest.mark.asyncio
+async def test_send_agent_message_reports_llm_failure_as_bad_gateway(
+    client: AsyncClient, agent_service
+):
+    agent_service.send_chat_message.side_effect = ValidationError("Ollama unreachable")
+
+    response = await client.post("/api/v1/agents/1/messages", json={"message": "hi"})
+
+    assert response.status_code == 502

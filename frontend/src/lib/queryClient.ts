@@ -31,4 +31,5 @@ export const queryKeys = {
   agentRuns: (agentId: number) => ["agents", agentId, "runs"] as const,
   agentModels: ["agents", "models"] as const,
   agentModelStatus: (model: string) => ["agents", "models", model, "status"] as const,
+  agentMessages: (agentId: number) => ["agents", agentId, "messages"] as const,
 };

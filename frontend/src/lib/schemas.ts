@@ -96,6 +96,7 @@ export const agentSchema = z.object({
   selection_strategy: z.enum(["scoring", "clustering", "rule_based"]),
   selection_threshold: z.coerce.number().min(0).max(1),
   incremental_field: z.string().optional(),
+  annotation_field: z.string().optional(),
 });
 export type AgentFormValues = z.infer<typeof agentSchema>;
 

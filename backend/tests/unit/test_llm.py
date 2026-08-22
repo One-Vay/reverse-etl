@@ -69,6 +69,53 @@ class TestGenerateJson:
                 await llm.generate_json("prompt", model="m", base_url="http://x")
 
 
+class TestGenerateText:
+    @pytest.mark.asyncio
+    async def test_returns_the_raw_response_text(self):
+        response = make_response(
+            json_data={"response": "Try mapping full_name to NAME."}
+        )
+        client = make_mock_client(response)
+        with patch("app.core.llm.httpx.AsyncClient", return_value=client):
+            result = await llm.generate_text("prompt", model="m", base_url="http://x")
+        assert result == "Try mapping full_name to NAME."
+
+    @pytest.mark.asyncio
+    async def test_does_not_request_json_format(self):
+        response = make_response(json_data={"response": "ok"})
+        client = make_mock_client(response)
+        with patch("app.core.llm.httpx.AsyncClient", return_value=client):
+            await llm.generate_text("prompt", model="m", base_url="http://x")
+        _, kwargs = client.post.call_args
+        assert "format" not in kwargs["json"]
+
+    @pytest.mark.asyncio
+    async def test_network_failure_raises_llm_unavailable(self):
+        client = MagicMock()
+        client.post = AsyncMock(side_effect=httpx.ConnectTimeout("timed out"))
+        client.__aenter__ = AsyncMock(return_value=client)
+        client.__aexit__ = AsyncMock(return_value=None)
+        with patch("app.core.llm.httpx.AsyncClient", return_value=client):
+            with pytest.raises(llm.LLMUnavailableError):
+                await llm.generate_text("prompt", model="m", base_url="http://x")
+
+    @pytest.mark.asyncio
+    async def test_http_error_status_raises_llm_unavailable(self):
+        response = make_response(status_code=500, text="boom")
+        client = make_mock_client(response)
+        with patch("app.core.llm.httpx.AsyncClient", return_value=client):
+            with pytest.raises(llm.LLMUnavailableError):
+                await llm.generate_text("prompt", model="m", base_url="http://x")
+
+    @pytest.mark.asyncio
+    async def test_missing_response_field_raises_llm_unavailable(self):
+        response = make_response(json_data={"not_response": "x"})
+        client = make_mock_client(response)
+        with patch("app.core.llm.httpx.AsyncClient", return_value=client):
+            with pytest.raises(llm.LLMUnavailableError):
+                await llm.generate_text("prompt", model="m", base_url="http://x")
+
+
 class TestIsModelPresent:
     @pytest.mark.asyncio
     async def test_true_when_model_name_matches(self):

@@ -57,6 +57,13 @@ class AgentRunStatus(str, enum.Enum):
     FAILED = "failed"
 
 
+class ChatRole(str, enum.Enum):
+    """Who sent one message in an agent's chat thread."""
+
+    USER = "user"
+    ASSISTANT = "assistant"
+
+
 class DataAgent(Base, TimestampMixin):
     """A goal-driven data selection + sync configuration.
 
@@ -103,6 +110,12 @@ class DataAgent(Base, TimestampMixin):
         Float, nullable=False, default=0.6
     )
     incremental_field: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Destination field (e.g. Bitrix24's "COMMENTS") that receives a
+    # human-readable note — the selection score and the model's reason —
+    # on every record this agent writes. Without this, a person looking at
+    # the destination record has no way to tell why it was loaded or what
+    # to do with it next; see app.features.agents.runner._annotate.
+    annotation_field: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     status: Mapped[AgentStatus] = mapped_column(
         String(20), nullable=False, default=AgentStatus.DRAFT
@@ -161,6 +174,13 @@ class AgentRun(Base):
     # The LLM's per-run explanation of what it selected and why — trimmed
     # to a reasonable size for display, not the full per-row reasoning.
     selection_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Full per-row breakdown: every considered row's {index, score, reason,
+    # selected, record} — `record` (the actual transformed payload sent to
+    # the destination) is only populated for selected rows. This is what
+    # the console's run-detail table renders, so a person can see exactly
+    # which records went out and why without cross-referencing the
+    # destination system.
+    row_details: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     error_message: Mapped[str | None] = mapped_column(String(2000), nullable=True)
 
     agent: Mapped["DataAgent"] = relationship(back_populates="runs", lazy="selectin")
@@ -177,3 +197,29 @@ class AgentRun(Base):
             f"<AgentRun(id={self.id}, agent_id={self.agent_id}, "
             f"status='{self.status}')>"
         )
+
+
+class AgentMessage(Base):
+    """One message in an agent's chat thread — lets a user ask questions
+    ("why was this row selected?", "how do I fix the missing name field?")
+    or ask for troubleshooting help, with the agent's own goal/plan/last
+    run as context (see `app.features.agents.chat`). Read-only assistance:
+    the assistant answers in the thread, it doesn't change the agent's
+    configuration on the user's behalf."""
+
+    __tablename__ = "agent_messages"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    agent_id: Mapped[int] = mapped_column(
+        ForeignKey("data_agents.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    role: Mapped[ChatRole] = mapped_column(String(20), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+
+    def __repr__(self) -> str:
+        return f"<AgentMessage(id={self.id}, agent_id={self.agent_id}, role='{self.role}')>"

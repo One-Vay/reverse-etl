@@ -7,7 +7,14 @@ from typing import Any
 from sqlalchemy import delete, desc, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.features.agents.models import AgentRun, AgentRunStatus, AgentStatus, DataAgent
+from app.features.agents.models import (
+    AgentMessage,
+    AgentRun,
+    AgentRunStatus,
+    AgentStatus,
+    ChatRole,
+    DataAgent,
+)
 from app.features.agents.schemas import AgentCreate, AgentUpdate
 
 
@@ -44,6 +51,7 @@ class AgentRepository:
             selection_strategy=data.selection_strategy,
             selection_threshold=data.selection_threshold,
             incremental_field=data.incremental_field,
+            annotation_field=data.annotation_field,
         )
         self.session.add(agent)
         await self.session.flush()
@@ -123,6 +131,7 @@ class AgentRunRepository:
         rows_selected: int = 0,
         rows_written: int = 0,
         selection_summary: str | None = None,
+        row_details: list[dict[str, Any]] | None = None,
         error_message: str | None = None,
     ) -> AgentRun:
         run = AgentRun(
@@ -134,6 +143,7 @@ class AgentRunRepository:
             rows_selected=rows_selected,
             rows_written=rows_written,
             selection_summary=selection_summary,
+            row_details=row_details or [],
             error_message=error_message,
         )
         self.session.add(run)
@@ -158,3 +168,35 @@ class AgentRunRepository:
         stmt = select(AgentRun).where(AgentRun.agent_id == agent_id)
         result = await self.session.execute(stmt)
         return len(result.scalars().all())
+
+
+class AgentMessageRepository:
+    """CRUD for one agent's chat thread."""
+
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def create(
+        self, *, agent_id: int, role: ChatRole, content: str, created_at: datetime
+    ) -> AgentMessage:
+        message = AgentMessage(
+            agent_id=agent_id, role=role, content=content, created_at=created_at
+        )
+        self.session.add(message)
+        await self.session.flush()
+        return message
+
+    async def get_by_agent(
+        self, agent_id: int, limit: int = 200
+    ) -> Sequence[AgentMessage]:
+        """Oldest first, capped at `limit` most recent — a chat thread
+        reads top-to-bottom, unlike run/mapping lists which are
+        newest-first."""
+        stmt = (
+            select(AgentMessage)
+            .where(AgentMessage.agent_id == agent_id)
+            .order_by(desc(AgentMessage.created_at))
+            .limit(limit)
+        )
+        result = await self.session.execute(stmt)
+        return list(reversed(result.scalars().all()))

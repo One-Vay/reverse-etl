@@ -7,14 +7,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.exceptions import NotFoundError, ValidationError
-from app.features.agents.repository import AgentRepository, AgentRunRepository
+from app.features.agents.repository import (
+    AgentMessageRepository,
+    AgentRepository,
+    AgentRunRepository,
+)
 from app.features.agents.schemas import (
     AgentCreate,
     AgentListResponse,
+    AgentPreview,
     AgentRead,
     AgentRunListResponse,
     AgentRunRead,
     AgentUpdate,
+    ChatMessageRead,
+    ChatRequest,
+    ChatResponse,
     LLMModelPullRequest,
     LLMModelStatus,
 )
@@ -33,6 +41,7 @@ async def get_agent_service(session: AsyncSession = Depends(get_db)) -> AgentSer
         MappingRepository(session),
         AgentRunRepository(session),
         SettingsRepository(session),
+        AgentMessageRepository(session),
     )
 
 
@@ -154,3 +163,45 @@ async def list_agent_runs(
         return await service.get_runs(id, skip=skip, limit=limit)
     except NotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+@router.post("/{id}/preview", response_model=AgentPreview)
+async def preview_agent(id: int, service: AgentService = Depends(get_agent_service)):
+    """Dry-run the agent: score its currently-due rows and build the
+    records that would be written, without touching the destination or
+    persisting a run. The step between "Generate plan" and "Run now" that
+    shows exactly what would happen first."""
+    try:
+        return await service.preview(id)
+    except NotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
+        )
+
+
+@router.get("/{id}/messages", response_model=list[ChatMessageRead])
+async def list_agent_messages(
+    id: int, service: AgentService = Depends(get_agent_service)
+):
+    """The agent's chat thread, oldest first."""
+    try:
+        return await service.get_chat_history(id)
+    except NotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+@router.post("/{id}/messages", response_model=ChatResponse)
+async def send_agent_message(
+    id: int, data: ChatRequest, service: AgentService = Depends(get_agent_service)
+):
+    """Ask the agent's LLM a question or for troubleshooting help, with
+    its goal/plan/mapping/last run as context. Read-only: the assistant
+    answers in the thread, it never changes the agent's configuration."""
+    try:
+        return await service.send_chat_message(id, data.message)
+    except NotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValidationError as e:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e))

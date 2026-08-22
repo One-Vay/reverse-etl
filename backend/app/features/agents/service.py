@@ -7,21 +7,38 @@ from __future__ import annotations
 import asyncio
 import logging
 
+from datetime import datetime, timezone
+
 from app.core import llm, telegram
 from app.core.exceptions import NotFoundError, ValidationError
+from app.features.agents import chat as agent_chat
 from app.features.agents import runner
-from app.features.agents.models import AgentRun, AgentRunStatus, AgentStatus, DataAgent
+from app.features.agents.models import (
+    AgentRun,
+    AgentRunStatus,
+    AgentStatus,
+    ChatRole,
+    DataAgent,
+)
 from app.features.agents.planner import generate_plan as _generate_plan
-from app.features.agents.repository import AgentRepository, AgentRunRepository
+from app.features.agents.repository import (
+    AgentMessageRepository,
+    AgentRepository,
+    AgentRunRepository,
+)
 from app.features.agents.schemas import (
     AgentCreate,
     AgentListResponse,
+    AgentPreview,
     AgentRead,
     AgentRunListResponse,
     AgentRunRead,
     AgentUpdate,
+    ChatMessageRead,
+    ChatResponse,
     FeatureNote,
     LLMModelStatus,
+    RowDetail,
 )
 from app.features.destinations.repository import DestinationRepository
 from app.features.mappings.repository import MappingRepository
@@ -52,12 +69,14 @@ class AgentService:
         mapping_repository: MappingRepository,
         run_repository: AgentRunRepository,
         settings_repository: SettingsRepository,
+        message_repository: AgentMessageRepository,
     ):
         self.repository = repository
         self.destination_repository = destination_repository
         self.mapping_repository = mapping_repository
         self.run_repository = run_repository
         self.settings_repository = settings_repository
+        self.message_repository = message_repository
 
     async def get(self, id: int) -> AgentRead:
         agent = await self.repository.get_by_id(id)
@@ -192,6 +211,92 @@ class AgentService:
             )
 
         return AgentRunRead.model_validate(run)
+
+    async def preview(self, id: int) -> AgentPreview:
+        """Dry-run the agent's selection step without writing anything —
+        the step between "Generate plan" and "Run now" that shows exactly
+        which rows would be selected, with what reasoning, and the actual
+        record that would be sent, so nothing about a run is a surprise.
+
+        Raises:
+            NotFoundError: If the agent doesn't exist.
+            ValidationError: If the agent has no plan yet, or the LLM
+                isn't enabled.
+        """
+        agent = await self.repository.get_by_id(id)
+        if not agent:
+            raise NotFoundError(f"Agent with id {id} not found")
+        if agent.status == AgentStatus.DRAFT or not agent.plan:
+            raise ValidationError(
+                "Generate a plan for this agent before previewing it."
+            )
+
+        prepared = await runner.preview(agent, session=self.repository.session)
+        return AgentPreview(
+            rows_considered=prepared.rows_considered,
+            rows_selected=len(prepared.records_to_write),
+            row_details=[RowDetail(**d) for d in prepared.row_details],
+        )
+
+    async def get_chat_history(self, id: int) -> list[ChatMessageRead]:
+        agent = await self.repository.get_by_id(id)
+        if not agent:
+            raise NotFoundError(f"Agent with id {id} not found")
+        messages = await self.message_repository.get_by_agent(id)
+        return [ChatMessageRead.model_validate(m) for m in messages]
+
+    async def send_chat_message(self, id: int, message: str) -> ChatResponse:
+        """Ask the agent's configured LLM to respond to a user's question
+        or troubleshooting request, grounded in its goal/plan/mapping/last
+        run. The assistant only answers — it never changes the agent's
+        configuration itself.
+
+        Raises:
+            NotFoundError: If the agent doesn't exist.
+            ValidationError: If the LLM is unreachable or returns nothing.
+        """
+        agent = await self.repository.get_by_id(id)
+        if not agent:
+            raise NotFoundError(f"Agent with id {id} not found")
+
+        app_settings = await self.settings_repository.get()
+        if not app_settings.llm_enabled:
+            raise ValidationError(
+                "AI mapping suggestions must be enabled in Settings before "
+                "chatting with an agent — it uses the same local LLM."
+            )
+
+        history_rows = await self.message_repository.get_by_agent(id)
+        history = [(m.role, m.content) for m in history_rows]
+
+        runs = await self.run_repository.get_by_agent(id, limit=1)
+        last_run = runs[0] if runs else None
+
+        now = datetime.now(timezone.utc)
+        user_message = await self.message_repository.create(
+            agent_id=id, role=ChatRole.USER, content=message, created_at=now
+        )
+
+        reply_text = await agent_chat.reply(
+            agent,
+            agent.mapping,
+            last_run,
+            history,
+            message,
+            base_url=app_settings.llm_base_url,
+        )
+
+        assistant_message = await self.message_repository.create(
+            agent_id=id,
+            role=ChatRole.ASSISTANT,
+            content=reply_text,
+            created_at=datetime.now(timezone.utc),
+        )
+
+        return ChatResponse(
+            user_message=ChatMessageRead.model_validate(user_message),
+            assistant_message=ChatMessageRead.model_validate(assistant_message),
+        )
 
     @staticmethod
     async def _notify_telegram(
