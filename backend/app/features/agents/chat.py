@@ -41,7 +41,7 @@ def _build_prompt(
         f"Source table: {mapping.source_table}",
         f"Destination entity: {mapping.destination_entity}",
         f"Field mappings (source_field -> destination_field): {field_mappings}",
-        f"Selection strategy: {agent.selection_strategy.value}",
+        f"Selection strategy: {agent.selection_strategy}",
         f"Selection threshold: {agent.selection_threshold}",
         f"Annotation field (receives the score/reason on each record): "
         f"{agent.annotation_field or '(none set)'}",
@@ -54,7 +54,7 @@ def _build_prompt(
     if last_run:
         context_lines.append(
             "Last run: "
-            f"status={last_run.status.value}, "
+            f"status={last_run.status}, "
             f"considered={last_run.rows_considered}, "
             f"selected={last_run.rows_selected}, "
             f"written={last_run.rows_written}"

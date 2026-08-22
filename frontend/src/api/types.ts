@@ -249,6 +249,7 @@ export interface DataAgent {
   selection_strategy: SelectionStrategy;
   selection_threshold: number;
   incremental_field: string | null;
+  annotation_field: string | null;
   status: AgentStatus;
   plan: AgentPlan | null;
   plan_generated_at: string | null;
@@ -268,6 +269,15 @@ export interface DataAgentInput {
   selection_strategy: SelectionStrategy;
   selection_threshold: number;
   incremental_field?: string | null;
+  annotation_field?: string | null;
+}
+
+export interface RowDetail {
+  index: number;
+  score: number;
+  reason: string;
+  selected: boolean;
+  record: Record<string, unknown> | null;
 }
 
 export interface AgentRun {
@@ -281,7 +291,29 @@ export interface AgentRun {
   rows_selected: number;
   rows_written: number;
   selection_summary: string | null;
+  row_details: RowDetail[];
   error_message: string | null;
+}
+
+export interface AgentPreview {
+  rows_considered: number;
+  rows_selected: number;
+  row_details: RowDetail[];
+}
+
+export type ChatRole = "user" | "assistant";
+
+export interface ChatMessage {
+  id: number;
+  agent_id: number;
+  role: ChatRole;
+  content: string;
+  created_at: string;
+}
+
+export interface ChatResponse {
+  user_message: ChatMessage;
+  assistant_message: ChatMessage;
 }
 
 export interface LLMModelStatus {

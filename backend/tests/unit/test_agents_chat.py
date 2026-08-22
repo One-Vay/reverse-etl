@@ -6,7 +6,15 @@ import pytest
 
 from app.core.exceptions import ValidationError
 from app.features.agents.chat import reply
-from app.features.agents.models import ChatRole, SelectionStrategy
+from app.features.agents.models import ChatRole
+
+# A SQLAlchemy column typed `Mapped[SelectionStrategy]` but stored as plain
+# `String` comes back from the DB as a plain `str`, not a `SelectionStrategy`
+# instance — mocking it as a real enum member here would hide any code that
+# assumes `.value` exists (it doesn't, on a plain string) and only breaks in
+# production. Same reasoning applies to `AgentRun.status` below.
+_SELECTION_STRATEGY_FROM_DB = "scoring"
+_RUN_STATUS_FROM_DB = "success"
 
 
 def make_agent(**overrides):
@@ -15,7 +23,7 @@ def make_agent(**overrides):
     agent.goal = overrides.get("goal", "Increase conversion")
     agent.actions = overrides.get("actions", "Direct calls")
     agent.selection_strategy = overrides.get(
-        "selection_strategy", SelectionStrategy.SCORING
+        "selection_strategy", _SELECTION_STRATEGY_FROM_DB
     )
     agent.selection_threshold = overrides.get("selection_threshold", 0.6)
     agent.annotation_field = overrides.get("annotation_field", None)
@@ -72,7 +80,7 @@ class TestReply:
     @pytest.mark.asyncio
     async def test_includes_last_run_summary_when_present(self):
         last_run = MagicMock()
-        last_run.status.value = "success"
+        last_run.status = _RUN_STATUS_FROM_DB
         last_run.rows_considered = 10
         last_run.rows_selected = 3
         last_run.rows_written = 3

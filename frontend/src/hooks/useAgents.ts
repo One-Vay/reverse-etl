@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { agentsApi } from "@/api/agents";
-import type { DataAgentInput } from "@/api/types";
+import type { ChatMessage, DataAgentInput } from "@/api/types";
 import { useToast } from "@/context/ToastContext";
 import { queryKeys } from "@/lib/queryClient";
 import { getErrorMessage } from "@/lib/utils";
@@ -145,6 +145,25 @@ export function useRunAgentNow() {
   });
 }
 
+/** Dry-runs the agent's selection step: scores due rows and shows exactly
+ * what would be written, without touching the destination or recording a
+ * run. Not a query — it's a side-effect-free action the user explicitly
+ * triggers each time, so a mutation (not cached) is the right shape. */
+export function usePreviewAgent() {
+  const { showToast } = useToast();
+
+  return useMutation({
+    mutationFn: (id: number) => agentsApi.preview(id),
+    onError: (error) => {
+      showToast({
+        variant: "error",
+        title: "Couldn't preview this agent",
+        description: getErrorMessage(error),
+      });
+    },
+  });
+}
+
 export function useAgentRuns(agentId: number | undefined) {
   return useQuery({
     queryKey: queryKeys.agentRuns(agentId ?? 0),
@@ -188,6 +207,40 @@ export function usePullAgentModel() {
       showToast({
         variant: "error",
         title: "Couldn't start model pull",
+        description: getErrorMessage(error),
+      });
+    },
+  });
+}
+
+/** An agent's chat thread, oldest first. */
+export function useAgentMessages(agentId: number | undefined) {
+  return useQuery({
+    queryKey: queryKeys.agentMessages(agentId ?? 0),
+    queryFn: () => agentsApi.listMessages(agentId as number),
+    enabled: agentId != null && agentId > 0,
+  });
+}
+
+/** Sends a chat message to the agent and appends both sides of the
+ * exchange to the cached thread — the assistant only ever answers, it
+ * never changes the agent's own configuration. */
+export function useSendAgentMessage(agentId: number) {
+  const queryClient = useQueryClient();
+  const { showToast } = useToast();
+
+  return useMutation({
+    mutationFn: (message: string) => agentsApi.sendMessage(agentId, message),
+    onSuccess: (result) => {
+      queryClient.setQueryData<ChatMessage[] | undefined>(
+        queryKeys.agentMessages(agentId),
+        (current) => [...(current ?? []), result.user_message, result.assistant_message],
+      );
+    },
+    onError: (error) => {
+      showToast({
+        variant: "error",
+        title: "Couldn't reach the agent",
         description: getErrorMessage(error),
       });
     },
