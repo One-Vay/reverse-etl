@@ -7,7 +7,12 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from app.features.agents.models import AgentRunStatus, AgentStatus, SelectionStrategy
+from app.features.agents.models import (
+    AgentRunStatus,
+    AgentStatus,
+    ChatRole,
+    SelectionStrategy,
+)
 
 
 class FeatureNote(BaseModel):
@@ -32,6 +37,16 @@ class AgentBase(BaseModel):
     selection_strategy: SelectionStrategy = SelectionStrategy.SCORING
     selection_threshold: float = Field(0.6, ge=0.0, le=1.0)
     incremental_field: str | None = Field(None, max_length=255)
+    annotation_field: str | None = Field(
+        None,
+        max_length=255,
+        description=(
+            "Destination field to receive a human-readable note (the "
+            "selection score and the model's reason) on every record this "
+            "agent writes, e.g. 'COMMENTS' — without it, nothing on the "
+            "written record explains why it was loaded."
+        ),
+    )
 
 
 class AgentCreate(AgentBase):
@@ -53,6 +68,7 @@ class AgentUpdate(BaseModel):
     selection_strategy: SelectionStrategy | None = None
     selection_threshold: float | None = Field(None, ge=0.0, le=1.0)
     incremental_field: str | None = Field(None, max_length=255)
+    annotation_field: str | None = Field(None, max_length=255)
     status: AgentStatus | None = None
 
 
@@ -88,6 +104,7 @@ class AgentRead(BaseModel):
     selection_strategy: SelectionStrategy
     selection_threshold: float
     incremental_field: str | None
+    annotation_field: str | None
     status: AgentStatus
     plan: dict[str, Any] | None
     plan_generated_at: datetime | None
@@ -105,6 +122,19 @@ class AgentListResponse(BaseModel):
     limit: int
 
 
+class RowDetail(BaseModel):
+    """One considered row's outcome — the full breakdown behind
+    `selection_summary`, rendered as a table in the console so a person
+    can see exactly what was sent to the destination and why, without
+    cross-referencing the destination system itself."""
+
+    index: int
+    score: float
+    reason: str
+    selected: bool
+    record: dict[str, Any] | None = None
+
+
 class AgentRunRead(BaseModel):
     """Schema for reading one agent run's result."""
 
@@ -118,6 +148,7 @@ class AgentRunRead(BaseModel):
     rows_selected: int
     rows_written: int
     selection_summary: str | None
+    row_details: list[RowDetail]
     error_message: str | None
 
     model_config = {"from_attributes": True}
@@ -128,6 +159,40 @@ class AgentRunListResponse(BaseModel):
     total: int
     skip: int
     limit: int
+
+
+class AgentPreview(BaseModel):
+    """Result of a dry run: scores every currently-due row against the
+    agent's plan exactly like a real run would, but never writes anything
+    — the step between "Generate plan" and "Run now" that lets a user see
+    precisely what would happen before committing to it."""
+
+    rows_considered: int
+    rows_selected: int
+    row_details: list[RowDetail]
+
+
+class ChatMessageRead(BaseModel):
+    id: int
+    agent_id: int
+    role: ChatRole
+    content: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ChatRequest(BaseModel):
+    message: str = Field(..., min_length=1, max_length=4000)
+
+
+class ChatResponse(BaseModel):
+    """The new exchange from one chat turn — the user's message (as
+    stored) and the assistant's reply, so the frontend can append both
+    without re-fetching the whole thread."""
+
+    user_message: ChatMessageRead
+    assistant_message: ChatMessageRead
 
 
 class LLMModelPullRequest(BaseModel):

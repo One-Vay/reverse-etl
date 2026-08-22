@@ -17,7 +17,11 @@ from app.features.syncs.repository import SyncRepository, SyncRunRepository
 from app.features.syncs.service import SyncService
 from app.features.settings.repository import SettingsRepository
 from app.features.settings.service import SettingsService
-from app.features.agents.repository import AgentRepository, AgentRunRepository
+from app.features.agents.repository import (
+    AgentMessageRepository,
+    AgentRepository,
+    AgentRunRepository,
+)
 from app.features.agents.service import AgentService
 from app.features.sources.router import get_source_service
 from app.features.destinations.router import get_destination_service
@@ -136,12 +140,20 @@ def agent_run_repository(mock_db_session):
 
 
 @pytest.fixture
+def agent_message_repository(mock_db_session):
+    repo = MagicMock(spec=AgentMessageRepository)
+    repo.session = mock_db_session
+    return repo
+
+
+@pytest.fixture
 def agent_service(
     agent_repository,
     destination_repository,
     mapping_repository,
     agent_run_repository,
     settings_repository,
+    agent_message_repository,
 ):
     service = MagicMock(spec=AgentService)
     service.repository = agent_repository
@@ -149,6 +161,7 @@ def agent_service(
     service.mapping_repository = mapping_repository
     service.run_repository = agent_run_repository
     service.settings_repository = settings_repository
+    service.message_repository = agent_message_repository
     return service
 
 

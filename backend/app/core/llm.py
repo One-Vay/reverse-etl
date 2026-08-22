@@ -58,6 +58,42 @@ async def generate_json(
         ) from exc
 
 
+async def generate_text(
+    prompt: str, *, model: str, base_url: str, timeout: float = 120.0
+) -> str:
+    """Ask the model for a free-form text response — used by the agent
+    chat (see `app.features.agents.chat`), where the reply is read by a
+    person, not parsed as data, so there's no reason to constrain it to
+    JSON the way `generate_json` does.
+
+    Raises:
+        LLMUnavailableError: If Ollama is unreachable, the model isn't
+            pulled yet, or the response is missing entirely.
+    """
+    try:
+        async with httpx.AsyncClient(base_url=base_url, timeout=timeout) as client:
+            response = await client.post(
+                "/api/generate",
+                json={"model": model, "prompt": prompt, "stream": False},
+            )
+    except httpx.HTTPError as exc:
+        raise LLMUnavailableError(
+            f"Could not reach Ollama at {base_url}: {exc}"
+        ) from exc
+
+    if response.is_error:
+        raise LLMUnavailableError(
+            f"Ollama returned HTTP {response.status_code}: {response.text[:300]}"
+        )
+
+    try:
+        return str(response.json()["response"])
+    except (ValueError, KeyError, TypeError) as exc:
+        raise LLMUnavailableError(
+            f"Ollama returned an unparseable response: {exc}"
+        ) from exc
+
+
 async def is_model_present(model: str, *, base_url: str, timeout: float = 10.0) -> bool:
     """Whether `model` has already been pulled onto the Ollama server."""
     try:

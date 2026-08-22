@@ -27,6 +27,8 @@ def make_agent(**overrides):
     agent.last_run_at = overrides.get("last_run_at", None)
     agent.feature_notes = overrides.get("feature_notes", [])
     agent.plan = overrides.get("plan", {"selection_rule": "score by recency"})
+    agent.annotation_field = overrides.get("annotation_field", None)
+    agent.name = overrides.get("name", "Test agent")
 
     mapping = MagicMock()
     mapping.source_id = overrides.get("source_id", 10)
@@ -251,6 +253,54 @@ class TestExecute:
         assert run.status == AgentRunStatus.FAILED
         assert run.error_message == "bad credentials"
 
+    @pytest.mark.asyncio
+    async def test_annotates_selected_records_when_annotation_field_is_set(
+        self, mock_session, mock_run_repo, mock_agent_repo, mock_app_settings
+    ):
+        agent = make_agent(annotation_field="COMMENTS", name="B2B booster")
+        rows = [{"email": "a@x.com"}]
+        scores = [RowScore(index=0, score=0.9, reason="hot lead")]
+
+        with (
+            patch(
+                "app.features.agents.runner.SettingsRepository",
+                return_value=MagicMock(get=AsyncMock(return_value=mock_app_settings)),
+            ),
+            patch(
+                "app.features.agents.runner.SourceService"
+            ) as mock_source_service_cls,
+            patch(
+                "app.features.agents.runner.DestinationService"
+            ) as mock_dest_service_cls,
+            patch(
+                "app.features.agents.runner.score_rows", AsyncMock(return_value=scores)
+            ),
+            patch(
+                "app.features.agents.runner.AgentRunRepository",
+                return_value=mock_run_repo,
+            ),
+            patch(
+                "app.features.agents.runner.AgentRepository",
+                return_value=mock_agent_repo,
+            ),
+        ):
+            source_connector = make_source_connector(rows)
+            mock_source_service_cls.return_value.build_connector = AsyncMock(
+                return_value=source_connector
+            )
+            dest_connector = make_destination_connector(written=1)
+            mock_dest_service_cls.return_value.build_connector = AsyncMock(
+                return_value=dest_connector
+            )
+
+            run = await runner.execute(agent, session=mock_session)
+
+        _, records = dest_connector.upsert_data.call_args.args
+        assert "B2B booster" in records[0]["COMMENTS"]
+        assert "0.90" in records[0]["COMMENTS"]
+        assert "hot lead" in records[0]["COMMENTS"]
+        assert run.row_details[0]["record"]["COMMENTS"] == records[0]["COMMENTS"]
+
     def test_incremental_where_uses_last_run_at(self):
         agent = make_agent(
             incremental_field="updated_at",
@@ -262,3 +312,45 @@ class TestExecute:
     def test_incremental_where_is_none_on_first_run(self):
         agent = make_agent(incremental_field="updated_at", last_run_at=None)
         assert runner._incremental_where(agent) is None
+
+
+class TestPreview:
+    @pytest.mark.asyncio
+    async def test_scores_rows_without_writing_or_persisting_a_run(
+        self, mock_session, mock_app_settings
+    ):
+        agent = make_agent(selection_threshold=0.5)
+        rows = [{"email": "a@x.com"}, {"email": "b@x.com"}]
+        scores = [
+            RowScore(index=0, score=0.9, reason="hot"),
+            RowScore(index=1, score=0.1, reason="cold"),
+        ]
+
+        with (
+            patch(
+                "app.features.agents.runner.SettingsRepository",
+                return_value=MagicMock(get=AsyncMock(return_value=mock_app_settings)),
+            ),
+            patch(
+                "app.features.agents.runner.SourceService"
+            ) as mock_source_service_cls,
+            patch(
+                "app.features.agents.runner.DestinationService"
+            ) as mock_dest_service_cls,
+            patch(
+                "app.features.agents.runner.score_rows", AsyncMock(return_value=scores)
+            ),
+        ):
+            source_connector = make_source_connector(rows)
+            mock_source_service_cls.return_value.build_connector = AsyncMock(
+                return_value=source_connector
+            )
+
+            prepared = await runner.preview(agent, session=mock_session)
+
+        mock_dest_service_cls.return_value.build_connector.assert_not_called()
+        assert prepared.rows_considered == 2
+        assert len(prepared.records_to_write) == 1
+        assert prepared.row_details[0]["selected"] is True
+        assert prepared.row_details[1]["selected"] is False
+        assert prepared.row_details[1]["record"] is None
