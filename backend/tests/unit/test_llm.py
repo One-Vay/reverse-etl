@@ -95,3 +95,41 @@ class TestIsModelPresent:
         with patch("app.core.llm.httpx.AsyncClient", return_value=client):
             result = await llm.is_model_present("m", base_url="http://x")
         assert result is False
+
+
+class TestListModels:
+    @pytest.mark.asyncio
+    async def test_returns_the_installed_model_names(self):
+        response = make_response(
+            json_data={"models": [{"name": "qwen2.5:0.5b"}, {"model": "llama3:8b"}]}
+        )
+        client = make_mock_client(response)
+        with patch("app.core.llm.httpx.AsyncClient", return_value=client):
+            result = await llm.list_models(base_url="http://x")
+        assert result == ["qwen2.5:0.5b", "llama3:8b"]
+
+    @pytest.mark.asyncio
+    async def test_empty_when_no_models_installed(self):
+        response = make_response(json_data={"models": []})
+        client = make_mock_client(response)
+        with patch("app.core.llm.httpx.AsyncClient", return_value=client):
+            result = await llm.list_models(base_url="http://x")
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_raises_when_unreachable(self):
+        client = MagicMock()
+        client.get = AsyncMock(side_effect=httpx.ConnectError("refused"))
+        client.__aenter__ = AsyncMock(return_value=client)
+        client.__aexit__ = AsyncMock(return_value=None)
+        with patch("app.core.llm.httpx.AsyncClient", return_value=client):
+            with pytest.raises(llm.LLMUnavailableError):
+                await llm.list_models(base_url="http://x")
+
+    @pytest.mark.asyncio
+    async def test_raises_on_http_error_status(self):
+        response = make_response(status_code=500, text="boom")
+        client = make_mock_client(response)
+        with patch("app.core.llm.httpx.AsyncClient", return_value=client):
+            with pytest.raises(llm.LLMUnavailableError):
+                await llm.list_models(base_url="http://x")

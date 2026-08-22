@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core import scheduler
 from app.core.config import settings
 from app.core.database import Base, engine
+from app.features.agents.router import router as agents_router
 from app.features.destinations.router import router as destinations_router
 from app.features.mappings.router import router as mappings_router
 from app.features.settings.router import router as settings_router
@@ -64,6 +65,7 @@ app.include_router(destinations_router, prefix="/api/v1")
 app.include_router(mappings_router, prefix="/api/v1")
 app.include_router(syncs_router, prefix="/api/v1")
 app.include_router(settings_router, prefix="/api/v1")
+app.include_router(agents_router, prefix="/api/v1")
 
 
 @app.get("/health", tags=["health"])

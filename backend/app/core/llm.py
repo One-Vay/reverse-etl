@@ -73,6 +73,31 @@ async def is_model_present(model: str, *, base_url: str, timeout: float = 10.0) 
     )
 
 
+async def list_models(*, base_url: str, timeout: float = 10.0) -> list[str]:
+    """Names of every model already pulled onto the Ollama server — used
+    by the data-agent UI's model picker (see
+    `app.features.agents.router`), which lets a user pick from what's
+    already installed or pull a new one by name.
+
+    Raises:
+        LLMUnavailableError: If Ollama can't be reached.
+    """
+    try:
+        async with httpx.AsyncClient(base_url=base_url, timeout=timeout) as client:
+            response = await client.get("/api/tags")
+    except httpx.HTTPError as exc:
+        raise LLMUnavailableError(
+            f"Could not reach Ollama at {base_url}: {exc}"
+        ) from exc
+    if response.is_error:
+        raise LLMUnavailableError(
+            f"Ollama returned HTTP {response.status_code}: {response.text[:300]}"
+        )
+    tags = response.json().get("models", [])
+    names = [entry.get("name") or entry.get("model") for entry in tags]
+    return [name for name in names if name]
+
+
 async def pull_model(model: str, *, base_url: str, timeout: float = 1800.0) -> None:
     """Download `model` onto the Ollama server. Can take a long time for a
     large model — callers should run this as a background task rather

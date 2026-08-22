@@ -17,6 +17,7 @@ from app.core.database import Base
 # autogenerate compares it against the database. Without these imports,
 # Base.metadata is empty and autogenerate thinks all existing tables should
 # be dropped.
+from app.features.agents import models as agents_models  # noqa: F401
 from app.features.destinations import models as destinations_models  # noqa: F401
 from app.features.mappings import models as mappings_models  # noqa: F401
 from app.features.settings import models as settings_models  # noqa: F401

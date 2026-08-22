@@ -7,14 +7,13 @@ background scheduler (`app.core.scheduler`) both funnel through.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.connectors.base import ConnectorError
 from app.features.destinations.repository import DestinationRepository
 from app.features.destinations.service import DestinationService
-from app.features.mappings.transform import apply_transformation
+from app.features.mappings.transform import transform_row
 from app.features.sources.repository import SourceRepository
 from app.features.sources.service import SourceService
 from app.features.syncs.models import Sync, SyncRun, SyncRunStatus, SyncRunTrigger
@@ -52,7 +51,7 @@ async def execute(
             )
         records_read = len(rows)
 
-        records = [_transform_row(row, mapping.field_mappings) for row in rows]
+        records = [transform_row(row, mapping.field_mappings) for row in rows]
 
         destination_service = DestinationService(DestinationRepository(session))
         destination_connector = await destination_service.build_connector(
@@ -116,17 +115,3 @@ def _incremental_where(sync: Sync) -> str | None:
         return None
     watermark = sync.last_run.isoformat()
     return f"{sync.incremental_field} > '{watermark}'"
-
-
-def _transform_row(
-    row: dict[str, Any], field_mappings: list[dict[str, Any]]
-) -> dict[str, Any]:
-    record: dict[str, Any] = {}
-    for field_mapping in field_mappings:
-        source_field = field_mapping["source_field"]
-        if source_field not in row:
-            continue
-        record[field_mapping["destination_field"]] = apply_transformation(
-            row[source_field], field_mapping.get("transformation")
-        )
-    return record

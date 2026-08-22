@@ -3,7 +3,7 @@ preset contract defined in frontend/src/lib/transformations.ts."""
 
 import pytest
 
-from app.features.mappings.transform import apply_transformation
+from app.features.mappings.transform import apply_transformation, transform_row
 
 
 class TestPassthrough:
@@ -73,3 +73,43 @@ class TestParseDate:
 
     def test_unparseable_text_passes_through(self):
         assert apply_transformation("not a date", "parse_date") == "not a date"
+
+
+class TestTransformRow:
+    def test_applies_each_field_mappings_transformation(self):
+        row = {"email": "USER@Example.com", "age": "42"}
+        field_mappings = [
+            {
+                "source_field": "email",
+                "destination_field": "EMAIL",
+                "transformation": "lowercase",
+            },
+            {
+                "source_field": "age",
+                "destination_field": "AGE",
+                "transformation": "to_number",
+            },
+        ]
+        assert transform_row(row, field_mappings) == {
+            "EMAIL": "user@example.com",
+            "AGE": 42,
+        }
+
+    def test_skips_a_field_mapping_whose_source_column_is_missing(self):
+        row = {"email": "user@example.com"}
+        field_mappings = [
+            {
+                "source_field": "email",
+                "destination_field": "EMAIL",
+                "transformation": "",
+            },
+            {
+                "source_field": "phone",
+                "destination_field": "PHONE",
+                "transformation": "",
+            },
+        ]
+        assert transform_row(row, field_mappings) == {"EMAIL": "user@example.com"}
+
+    def test_empty_field_mappings_produces_an_empty_record(self):
+        assert transform_row({"email": "user@example.com"}, []) == {}

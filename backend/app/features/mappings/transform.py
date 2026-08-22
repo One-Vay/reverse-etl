@@ -65,6 +65,25 @@ def apply_transformation(value: Any, transformation: str | None) -> Any:
     return value
 
 
+def transform_row(
+    row: dict[str, Any], field_mappings: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """Apply every field mapping's transformation to one source row,
+    producing the destination-shaped record to write. Shared by the sync
+    engine (`app.features.syncs.runner`) and the data-agent engine
+    (`app.features.agents.runner`) — both write through the same kind of
+    mapping, just selecting a different subset of rows first."""
+    record: dict[str, Any] = {}
+    for field_mapping in field_mappings:
+        source_field = field_mapping["source_field"]
+        if source_field not in row:
+            continue
+        record[field_mapping["destination_field"]] = apply_transformation(
+            row[source_field], field_mapping.get("transformation")
+        )
+    return record
+
+
 def _to_number(value: Any) -> Any:
     text = str(value).strip()
     try:

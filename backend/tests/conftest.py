@@ -17,11 +17,14 @@ from app.features.syncs.repository import SyncRepository, SyncRunRepository
 from app.features.syncs.service import SyncService
 from app.features.settings.repository import SettingsRepository
 from app.features.settings.service import SettingsService
+from app.features.agents.repository import AgentRepository, AgentRunRepository
+from app.features.agents.service import AgentService
 from app.features.sources.router import get_source_service
 from app.features.destinations.router import get_destination_service
 from app.features.mappings.router import get_mapping_service
 from app.features.syncs.router import get_sync_service
 from app.features.settings.router import get_settings_service
+from app.features.agents.router import get_agent_service
 
 
 @pytest.fixture
@@ -118,6 +121,37 @@ def settings_service(settings_repository):
     return service
 
 
+@pytest.fixture
+def agent_repository(mock_db_session):
+    repo = MagicMock(spec=AgentRepository)
+    repo.session = mock_db_session
+    return repo
+
+
+@pytest.fixture
+def agent_run_repository(mock_db_session):
+    repo = MagicMock(spec=AgentRunRepository)
+    repo.session = mock_db_session
+    return repo
+
+
+@pytest.fixture
+def agent_service(
+    agent_repository,
+    destination_repository,
+    mapping_repository,
+    agent_run_repository,
+    settings_repository,
+):
+    service = MagicMock(spec=AgentService)
+    service.repository = agent_repository
+    service.destination_repository = destination_repository
+    service.mapping_repository = mapping_repository
+    service.run_repository = agent_run_repository
+    service.settings_repository = settings_repository
+    return service
+
+
 @pytest_asyncio.fixture
 async def client(
     source_service,
@@ -125,6 +159,7 @@ async def client(
     mapping_service,
     sync_service,
     settings_service,
+    agent_service,
     mock_db_session,
 ):
     """Create test client with overridden dependencies."""
@@ -144,11 +179,15 @@ async def client(
     def override_get_settings_service():
         return settings_service
 
+    def override_get_agent_service():
+        return agent_service
+
     app.dependency_overrides[get_source_service] = override_get_source_service
     app.dependency_overrides[get_destination_service] = override_get_destination_service
     app.dependency_overrides[get_mapping_service] = override_get_mapping_service
     app.dependency_overrides[get_sync_service] = override_get_sync_service
     app.dependency_overrides[get_settings_service] = override_get_settings_service
+    app.dependency_overrides[get_agent_service] = override_get_agent_service
     app.dependency_overrides[get_db] = lambda: mock_db_session
 
     transport = ASGITransport(app=app)
