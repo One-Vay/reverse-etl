@@ -1,4 +1,4 @@
-import { Cable, LayoutDashboard, Settings, Waypoints } from "lucide-react";
+import { Bot, Cable, LayoutDashboard, Settings, Waypoints } from "lucide-react";
 import { NavLink } from "react-router-dom";
 
 import { cn } from "@/lib/utils";
@@ -7,6 +7,7 @@ const NAV_ITEMS = [
   { to: "/", label: "Connections", icon: Cable, end: true },
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, end: false },
   { to: "/pipelines", label: "Pipelines", icon: Waypoints, end: false },
+  { to: "/agents", label: "Data agents", icon: Bot, end: false },
   { to: "/settings", label: "Settings", icon: Settings, end: false },
 ];
 

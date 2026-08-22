@@ -217,3 +217,75 @@ export interface ListParams {
   // satisfy buildQuery's `Record<string, string | number | undefined>` parameter type.
   [key: string]: string | number | undefined;
 }
+
+export type AgentStatus = "draft" | "ready" | "archived";
+export type SelectionStrategy = "scoring" | "clustering" | "rule_based";
+export type AgentRunStatus = "running" | "success" | "failed";
+
+export interface FeatureNote {
+  column: string;
+  description: string;
+}
+
+export interface AgentPlan {
+  strategy: SelectionStrategy;
+  reasoning: string;
+  selection_rule: string;
+  recommended_threshold: number | null;
+  next_actions: string[];
+  model: string;
+  generated_at: string;
+}
+
+export interface DataAgent {
+  id: number;
+  name: string;
+  destination_id: number;
+  mapping_id: number;
+  goal: string;
+  actions: string;
+  feature_notes: FeatureNote[];
+  llm_model: string;
+  selection_strategy: SelectionStrategy;
+  selection_threshold: number;
+  incremental_field: string | null;
+  status: AgentStatus;
+  plan: AgentPlan | null;
+  plan_generated_at: string | null;
+  last_run_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DataAgentInput {
+  name: string;
+  destination_id: number;
+  mapping_id: number;
+  goal: string;
+  actions: string;
+  feature_notes: FeatureNote[];
+  llm_model: string;
+  selection_strategy: SelectionStrategy;
+  selection_threshold: number;
+  incremental_field?: string | null;
+}
+
+export interface AgentRun {
+  id: number;
+  agent_id: number;
+  agent_name: string | null;
+  status: AgentRunStatus;
+  started_at: string;
+  finished_at: string | null;
+  rows_considered: number;
+  rows_selected: number;
+  rows_written: number;
+  selection_summary: string | null;
+  error_message: string | null;
+}
+
+export interface LLMModelStatus {
+  model: string;
+  present: boolean;
+  pulling: boolean;
+}

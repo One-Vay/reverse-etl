@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { destinationSchema, mappingSchema, sourceSchema, syncSchema } from "./schemas";
+import {
+  agentSchema,
+  destinationSchema,
+  mappingSchema,
+  sourceSchema,
+  syncSchema,
+} from "./schemas";
 
 const validSource = {
   name: "Production Postgres",
@@ -147,6 +153,64 @@ describe("syncSchema", () => {
 
   it("rejects a status outside the known enum", () => {
     const result = syncSchema.safeParse({ ...validSync, status: "archived" });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("agentSchema", () => {
+  const validAgent = {
+    name: "Conversion booster",
+    destination_id: 1,
+    mapping_id: 1,
+    goal: "Increase conversion",
+    actions: "Direct calls",
+    llm_model: "qwen2.5:0.5b",
+    selection_strategy: "scoring",
+    selection_threshold: 0.6,
+  };
+
+  it("accepts a valid agent and defaults feature_notes to an empty array", () => {
+    const result = agentSchema.safeParse(validAgent);
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.feature_notes).toEqual([]);
+  });
+
+  it("rejects a blank goal", () => {
+    const result = agentSchema.safeParse({ ...validAgent, goal: "" });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a blank llm_model", () => {
+    const result = agentSchema.safeParse({ ...validAgent, llm_model: "" });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a threshold outside 0-1", () => {
+    const result = agentSchema.safeParse({ ...validAgent, selection_threshold: 1.5 });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects an unknown selection strategy", () => {
+    const result = agentSchema.safeParse({
+      ...validAgent,
+      selection_strategy: "guessing",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts feature notes with column and description", () => {
+    const result = agentSchema.safeParse({
+      ...validAgent,
+      feature_notes: [{ column: "last_purchase_at", description: "recency matters" }],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects a feature note missing a description", () => {
+    const result = agentSchema.safeParse({
+      ...validAgent,
+      feature_notes: [{ column: "last_purchase_at", description: "" }],
+    });
     expect(result.success).toBe(false);
   });
 });

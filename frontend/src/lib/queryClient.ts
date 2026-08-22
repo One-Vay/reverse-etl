@@ -27,4 +27,8 @@ export const queryKeys = {
   upcomingSyncRuns: (days: number) => ["syncs", "upcoming", days] as const,
   settings: ["settings"] as const,
   llmStatus: ["settings", "llm", "status"] as const,
+  agents: ["agents"] as const,
+  agentRuns: (agentId: number) => ["agents", agentId, "runs"] as const,
+  agentModels: ["agents", "models"] as const,
+  agentModelStatus: (model: string) => ["agents", "models", model, "status"] as const,
 };

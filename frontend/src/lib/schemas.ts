@@ -80,6 +80,25 @@ export const syncSchema = z
   );
 export type SyncFormValues = z.infer<typeof syncSchema>;
 
+export const featureNoteSchema = z.object({
+  column: z.string().min(1, "Required"),
+  description: z.string().min(1, "Required"),
+});
+
+export const agentSchema = z.object({
+  name: z.string().min(1, "Name is required").max(255),
+  destination_id: z.coerce.number().int().min(1, "Select a destination"),
+  mapping_id: z.coerce.number().int().min(1, "Select a mapping"),
+  goal: z.string().min(1, "Describe the goal"),
+  actions: z.string().min(1, "Describe the planned actions"),
+  feature_notes: z.array(featureNoteSchema).default([]),
+  llm_model: z.string().min(1, "Choose a model"),
+  selection_strategy: z.enum(["scoring", "clustering", "rule_based"]),
+  selection_threshold: z.coerce.number().min(0).max(1),
+  incremental_field: z.string().optional(),
+});
+export type AgentFormValues = z.infer<typeof agentSchema>;
+
 export const settingsSchema = z.object({
   scheduler_enabled: z.boolean(),
   scheduler_poll_interval_seconds: z.coerce.number().int().min(5).max(3600),
